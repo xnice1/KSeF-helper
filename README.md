@@ -245,6 +245,6 @@ The included XSD is a placeholder for MVP development. Replace it with the offic
 - Audit logs
 - Subscription plans and usage limits
 
-## Screenshots
+## License
 
-Screenshots can be added here after the first local run.
+MIT License. See `LICENSE`.
