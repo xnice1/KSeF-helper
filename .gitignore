@@ -1,0 +1,10 @@
+.idea/
+.vscode/
+target/
+node_modules/
+dist/
+uploads/
+*.log
+*.tsbuildinfo
+.env
+.DS_Store

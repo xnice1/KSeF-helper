@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ksef-helper-postgres
+    environment:
+      POSTGRES_DB: ksef_helper
+      POSTGRES_USER: ksef
+      POSTGRES_PASSWORD: ksef
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ksef -d ksef_helper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ksef-helper-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ksef_helper
+      SPRING_DATASOURCE_USERNAME: ksef
+      SPRING_DATASOURCE_PASSWORD: ksef
+      JWT_SECRET: ZmFrZS1kZWZhdWx0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMzItYnl0ZXM=
+      FILE_STORAGE_PATH: /app/uploads
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: ksef-helper-frontend
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres-data:
+  uploads:

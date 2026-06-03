@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice>
+    <InvoiceNumber>FV/2026/001</InvoiceNumber>
+    <IssueDate>2026-01-15</IssueDate>
+    <SaleDate>2026-01-15</SaleDate>
+    <Currency>PLN</Currency>
+    <Seller>
+        <Name>Example Seller Sp. z o.o.</Name>
+        <Nip>5250000000</Nip>
+    </Seller>
+    <Buyer>
+        <Name>Example Buyer Sp. z o.o.</Name>
+        <Nip>5210000000</Nip>
+    </Buyer>
+    <Payment>
+        <PaymentMethod>TRANSFER</PaymentMethod>
+        <BankAccount>12105000997603123456789123</BankAccount>
+    </Payment>
+    <Totals>
+        <NetAmount>100.00</NetAmount>
+        <VatAmount>23.00</VatAmount>
+        <GrossAmount>123.00</GrossAmount>
+    </Totals>
+    <Items>
+        <Item>
+            <Name>Consulting service</Name>
+            <Quantity>1</Quantity>
+            <UnitPrice>100.00</UnitPrice>
+            <NetAmount>100.00</NetAmount>
+            <VatRate>23</VatRate>
+            <VatAmount>23.00</VatAmount>
+            <GrossAmount>123.00</GrossAmount>
+        </Item>
+    </Items>
+</Invoice>

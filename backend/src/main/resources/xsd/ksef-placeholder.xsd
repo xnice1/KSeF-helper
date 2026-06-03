@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:element name="Invoice">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="InvoiceNumber" type="xs:string"/>
+                <xs:element name="IssueDate" type="xs:date"/>
+                <xs:element name="SaleDate" type="xs:date" minOccurs="0"/>
+                <xs:element name="Currency" type="xs:string"/>
+                <xs:element name="Seller" type="PartyType"/>
+                <xs:element name="Buyer" type="PartyType" minOccurs="0"/>
+                <xs:element name="Payment" type="PaymentType" minOccurs="0"/>
+                <xs:element name="Totals" type="TotalsType"/>
+                <xs:element name="Items" type="ItemsType" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="PartyType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Nip" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="PaymentType">
+        <xs:sequence>
+            <xs:element name="PaymentMethod" type="xs:string" minOccurs="0"/>
+            <xs:element name="BankAccount" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TotalsType">
+        <xs:sequence>
+            <xs:element name="NetAmount" type="xs:decimal"/>
+            <xs:element name="VatAmount" type="xs:decimal"/>
+            <xs:element name="GrossAmount" type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ItemsType">
+        <xs:sequence>
+            <xs:element name="Item" type="ItemType" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ItemType">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="Quantity" type="xs:decimal"/>
+            <xs:element name="UnitPrice" type="xs:decimal"/>
+            <xs:element name="NetAmount" type="xs:decimal"/>
+            <xs:element name="VatRate" type="xs:decimal"/>
+            <xs:element name="VatAmount" type="xs:decimal"/>
+            <xs:element name="GrossAmount" type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

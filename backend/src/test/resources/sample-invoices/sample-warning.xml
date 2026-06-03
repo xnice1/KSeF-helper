@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice>
+    <InvoiceNumber>FV/2026/WARNING</InvoiceNumber>
+    <IssueDate>2026-01-20</IssueDate>
+    <Currency>PLN</Currency>
+    <Seller>
+        <Name>Example Seller Sp. z o.o.</Name>
+        <Nip>5250000000</Nip>
+    </Seller>
+    <Buyer>
+        <Name>Example Buyer Sp. z o.o.</Name>
+    </Buyer>
+    <Payment>
+        <PaymentMethod>TRANSFER</PaymentMethod>
+    </Payment>
+    <Totals>
+        <NetAmount>100.00</NetAmount>
+        <VatAmount>23.00</VatAmount>
+        <GrossAmount>123.00</GrossAmount>
+    </Totals>
+</Invoice>

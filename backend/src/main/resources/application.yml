@@ -1,0 +1,33 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ksef-helper
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:55432/ksef_helper}
+    username: ${SPRING_DATASOURCE_USERNAME:ksef}
+    password: ${SPRING_DATASOURCE_PASSWORD:ksef}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:10MB}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:ZmFrZS1kZWZhdWx0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMzItYnl0ZXM=}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  storage:
+    local-path: ${FILE_STORAGE_PATH:uploads}
+    max-upload-bytes: ${MAX_UPLOAD_BYTES:10485760}
+  xml:
+    xsd-path: classpath:xsd/ksef-placeholder.xsd
