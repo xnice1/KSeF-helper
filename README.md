@@ -244,7 +244,3 @@ The included XSD is a placeholder for MVP development. Replace it with the offic
 - S3-compatible file storage
 - Audit logs
 - Subscription plans and usage limits
-
-## Screenshots
-
-Screenshots can be added here after the first local run.
