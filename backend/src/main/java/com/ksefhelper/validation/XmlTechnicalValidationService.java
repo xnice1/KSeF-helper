@@ -5,27 +5,28 @@ import com.ksefhelper.validation.entity.ValidationSeverity;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
 import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.Schema;
 import javax.xml.validation.Validator;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class XmlTechnicalValidationService {
-    private final Resource xsdResource;
+    private final Schema schema;
 
-    public XmlTechnicalValidationService(@Value("${app.xml.xsd-path}") Resource xsdResource) {
-        this.xsdResource = xsdResource;
+    public XmlTechnicalValidationService(@Value("${app.xml.xsd-path}") Resource xsdResource) throws SAXException, IOException {
+        this.schema = XmlSecurity.secureSchemaFactory().newSchema(xsdResource.getURL());
     }
 
     public List<ValidationIssue> validate(File xmlFile) {
         List<ValidationIssue> issues = new ArrayList<>();
         try {
-            Schema schema = XmlSecurity.secureSchemaFactory().newSchema(xsdResource.getURL());
             Validator validator = schema.newValidator();
             validator.setProperty(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
             validator.setProperty(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
@@ -36,7 +37,7 @@ public class XmlTechnicalValidationService {
                     "XML_SCHEMA_INVALID",
                     "line " + ex.getLineNumber() + ", column " + ex.getColumnNumber(),
                     "XML does not match the invoice schema: " + cleanXmlMessage(ex.getMessage()),
-                    "Check the highlighted XML field or replace the sample XSD with the official FA(3) schema when you are ready."
+                    "Check the highlighted XML field against the configured FA(3) schema."
             ));
         } catch (Exception ex) {
             issues.add(new ValidationIssue(

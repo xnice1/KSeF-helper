@@ -50,6 +50,8 @@ Infrastructure:
 - Original XML file storage
 - SHA-256 checksum calculation
 - Placeholder XSD validation from `backend/src/main/resources/xsd/ksef-placeholder.xsd`
+- Official FA(3) schema files bundled under `backend/src/main/resources/xsd/`
+- FA(3) parser support for common official fields such as `Podmiot1`, `Podmiot2`, `P_1`, `P_2`, `P_13_*`, `P_14_*`, `P_15`, and `FaWiersz`
 - Defensive XML parsing with XXE protections
 - Business validation for missing invoice fields and inconsistent totals
 - Invoice archive with filters
@@ -134,6 +136,7 @@ FILE_STORAGE_PATH=uploads
 MAX_FILE_SIZE=10MB
 MAX_REQUEST_SIZE=10MB
 MAX_UPLOAD_BYTES=10485760
+XML_XSD_PATH=classpath:xsd/ksef-placeholder.xsd
 ```
 
 Frontend:
@@ -232,6 +235,29 @@ backend/src/test/resources/sample-invoices/
 ```
 
 The included XSD is a placeholder for MVP development. Replace it with the official FA(3) schema when implementing production-grade KSeF validation.
+
+Official FA(3) schema files are also bundled under:
+
+```text
+backend/src/main/resources/xsd/schemat_fa_vat-3-_v1-0.xsd
+backend/src/main/resources/xsd/StrukturyDanych_v10-0E.xsd
+backend/src/main/resources/xsd/ElementarneTypyDanych_v10-0E.xsd
+backend/src/main/resources/xsd/KodyKrajow_v10-0E.xsd
+```
+
+Official FA(3) sample XML files are under:
+
+```text
+backend/src/test/resources/sample-invoices/fa3-official/
+```
+
+The runtime default still uses the placeholder schema because Java's built-in XSD validator is too slow for full FA(3) validation in local testing. To experiment with official schema validation, set:
+
+```text
+XML_XSD_PATH=classpath:xsd/schemat_fa_vat-3-_v1-0.xsd
+```
+
+Before production monetization, replace or isolate this with a performant FA(3) validation strategy, for example a validation worker or a dedicated XML validation engine.
 
 ## Roadmap
 

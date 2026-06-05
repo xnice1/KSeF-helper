@@ -89,8 +89,6 @@ public class BusinessValidationService {
             warning(item.unitPrice(), "ITEM_UNIT_PRICE_MISSING", prefix + ".unitPrice", "An invoice item unit price is missing.", "Check line item unit price.", issues);
             warning(item.netAmount(), "ITEM_NET_AMOUNT_MISSING", prefix + ".netAmount", "An invoice item net amount is missing.", "Check line item net amount.", issues);
             warning(item.vatRate(), "ITEM_VAT_RATE_MISSING", prefix + ".vatRate", "An invoice item VAT rate is missing.", "Check line item VAT rate.", issues);
-            warning(item.vatAmount(), "ITEM_VAT_AMOUNT_MISSING", prefix + ".vatAmount", "An invoice item VAT amount is missing.", "Check line item VAT amount.", issues);
-            warning(item.grossAmount(), "ITEM_GROSS_AMOUNT_MISSING", prefix + ".grossAmount", "An invoice item gross amount is missing.", "Check line item gross amount.", issues);
             if (item.vatRate() != null && !isCommonVatRate(item.vatRate())) {
                 issues.add(new ValidationIssue(
                         ValidationSeverity.WARNING,

@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class InvoiceXmlParser {
@@ -49,10 +50,10 @@ public class InvoiceXmlParser {
                             "//*[local-name()='Podmiot2']//*[local-name()='NIP']",
                             "//*[local-name()='Nabywca']//*[local-name()='NIP']"),
                     text(xpath, document, "Currency", "KodWaluty", "Waluta"),
-                    amount(text(xpath, document, "NetAmount", "P_13_1", "Netto")),
-                    amount(text(xpath, document, "VatAmount", "P_14_1", "VAT")),
+                    totalAmount(xpath, document, "P_13_", "NetAmount", "Netto"),
+                    totalAmount(xpath, document, "P_14_", "VatAmount", "VAT"),
                     amount(text(xpath, document, "GrossAmount", "P_15", "Brutto")),
-                    text(xpath, document, "PaymentMethod", "FormaPlatnosci"),
+                    paymentMethod(text(xpath, document, "PaymentMethod", "FormaPlatnosci")),
                     text(xpath, document, "BankAccount", "NrRB", "RachunekBankowy"),
                     items(xpath, document)
             );
@@ -103,6 +104,56 @@ public class InvoiceXmlParser {
             }
         }
         return null;
+    }
+
+    private BigDecimal totalAmount(XPath xpath, Document document, String faPrefix, String... fallbackNames) throws Exception {
+        BigDecimal fallback = amount(text(xpath, document, fallbackNames));
+        BigDecimal faTotal = sumDirectFaAmounts(xpath, document, faPrefix);
+        return faTotal == null ? fallback : faTotal;
+    }
+
+    private BigDecimal sumDirectFaAmounts(XPath xpath, Document document, String prefix) throws Exception {
+        NodeList nodes = (NodeList) xpath.evaluate(
+                "//*[local-name()='Fa']/*[starts-with(local-name(), '" + prefix + "')]",
+                document,
+                XPathConstants.NODESET
+        );
+        BigDecimal total = BigDecimal.ZERO;
+        boolean found = false;
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Node node = nodes.item(i);
+            String name = localName(node);
+            if (name.endsWith("W")) {
+                continue;
+            }
+            BigDecimal amount = amount(node.getTextContent());
+            if (amount != null) {
+                total = total.add(amount);
+                found = true;
+            }
+        }
+        return found ? total : null;
+    }
+
+    private String localName(Node node) {
+        if (node.getLocalName() != null) {
+            return node.getLocalName();
+        }
+        String name = node.getNodeName();
+        int colon = name.indexOf(':');
+        return colon >= 0 ? name.substring(colon + 1) : name;
+    }
+
+    private String paymentMethod(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        return switch (normalized) {
+            case "1" -> "CASH";
+            case "6" -> "TRANSFER";
+            default -> normalized.toUpperCase(Locale.ROOT);
+        };
     }
 
     private LocalDate date(String value) {

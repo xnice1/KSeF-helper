@@ -30,4 +30,5 @@ app:
     local-path: ${FILE_STORAGE_PATH:uploads}
     max-upload-bytes: ${MAX_UPLOAD_BYTES:10485760}
   xml:
-    xsd-path: classpath:xsd/ksef-placeholder.xsd
+    xsd-path: ${XML_XSD_PATH:classpath:xsd/ksef-placeholder.xsd}
+    official-fa3-xsd-path: classpath:xsd/schemat_fa_vat-3-_v1-0.xsd

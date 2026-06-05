@@ -62,7 +62,7 @@ class BusinessValidationServiceTest {
     }
 
     @Test
-    void warnsAboutMissingItemVatAmountAndUnusualVatRate() {
+    void warnsAboutUnusualVatRate() {
         ParsedInvoice invoice = new ParsedInvoice(
                 "FV/1",
                 LocalDate.of(2026, 1, 15),
@@ -83,7 +83,6 @@ class BusinessValidationServiceTest {
         List<ValidationIssue> issues = service.validate(invoice);
 
         assertThat(issues)
-                .anyMatch(issue -> issue.code().equals("ITEM_VAT_AMOUNT_MISSING"))
                 .anyMatch(issue -> issue.code().equals("ITEM_VAT_RATE_UNUSUAL"));
     }
 
