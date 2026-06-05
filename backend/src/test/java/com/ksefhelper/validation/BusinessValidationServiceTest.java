@@ -17,7 +17,7 @@ class BusinessValidationServiceTest {
 
     @Test
     void returnsNoIssuesForConsistentInvoice() {
-        ParsedInvoice invoice = invoice("FV/1", new BigDecimal("100.00"), new BigDecimal("23.00"), new BigDecimal("123.00"));
+        ParsedInvoice invoice = invoice(new BigDecimal("100.00"), new BigDecimal("23.00"), new BigDecimal("123.00"));
 
         List<ValidationIssue> issues = service.validate(invoice);
 
@@ -26,7 +26,7 @@ class BusinessValidationServiceTest {
 
     @Test
     void returnsErrorWhenTotalsDoNotMatch() {
-        ParsedInvoice invoice = invoice("FV/1", new BigDecimal("100.00"), new BigDecimal("23.00"), new BigDecimal("130.00"));
+        ParsedInvoice invoice = invoice(new BigDecimal("100.00"), new BigDecimal("23.00"), new BigDecimal("130.00"));
 
         List<ValidationIssue> issues = service.validate(invoice);
 
@@ -86,9 +86,9 @@ class BusinessValidationServiceTest {
                 .anyMatch(issue -> issue.code().equals("ITEM_VAT_RATE_UNUSUAL"));
     }
 
-    private ParsedInvoice invoice(String number, BigDecimal net, BigDecimal vat, BigDecimal gross) {
+    private ParsedInvoice invoice(BigDecimal net, BigDecimal vat, BigDecimal gross) {
         return new ParsedInvoice(
-                number,
+                "FV/1",
                 LocalDate.of(2026, 1, 15),
                 LocalDate.of(2026, 1, 15),
                 "Seller",
