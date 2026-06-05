@@ -247,4 +247,4 @@ The included XSD is a placeholder for MVP development. Replace it with the offic
 
 ## License
 
-MIT License. See `LICENSE`.
+Proprietary License. All rights reserved. See `LICENSE`.

@@ -1,21 +1,45 @@
-MIT License
+Proprietary License
 
-Copyright (c) 2026 xnice1
+Copyright (c) 2026 xnice1. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software, including source code, object code, documentation, designs,
+database schema, user interface assets, and related materials (the "Software"),
+is proprietary to xnice1.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+No license, right, title, or interest in the Software is granted except as
+expressly authorized in writing by xnice1.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Without prior written permission from xnice1, you may not:
+
+1. copy, reproduce, publish, distribute, sublicense, sell, lease, or otherwise
+   transfer the Software;
+2. modify, adapt, translate, create derivative works from, or merge the
+   Software with other software;
+3. use the Software to operate a hosted service, commercial product, managed
+   service, invoice validation platform, tax compliance platform, accounting
+   platform, or software-as-a-service offering;
+4. reverse engineer, decompile, disassemble, or attempt to derive source code
+   from any compiled version of the Software, except where such restriction is
+   prohibited by applicable law;
+5. remove or alter copyright, proprietary, confidentiality, or security notices;
+6. use the Software in a way that exposes confidential customer data, invoice
+   data, company data, tax identifiers, accounting records, validation results,
+   or other sensitive information without appropriate authorization and
+   safeguards.
+
+Access to this repository or possession of a copy of the Software does not
+grant permission to use it in production, provide it to third parties, or offer
+it as a service.
+
+Hosted use of KSeF Helper, if offered, is governed by separate commercial terms,
+including applicable Terms of Service, Privacy Policy, Data Processing
+Agreement, security terms, and subscription agreement.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND WITHOUT WARRANTIES OF ANY KIND, WHETHER
+EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, XNICE1 SHALL NOT BE
+LIABLE FOR ANY CLAIM, DAMAGES, LOSSES, LIABILITY, OR EXPENSES ARISING FROM OR
+RELATING TO THE SOFTWARE OR ITS USE.
+
+Any rights not expressly granted are reserved by xnice1.
