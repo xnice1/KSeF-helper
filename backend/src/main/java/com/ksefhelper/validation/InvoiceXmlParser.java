@@ -55,6 +55,7 @@ public class InvoiceXmlParser {
                     amount(text(xpath, document, "GrossAmount", "P_15", "Brutto")),
                     paymentMethod(text(xpath, document, "PaymentMethod", "FormaPlatnosci")),
                     text(xpath, document, "BankAccount", "NrRB", "RachunekBankowy"),
+                    text(xpath, document, "InvoiceType", "RodzajFaktury"),
                     items(xpath, document)
             );
         } catch (Exception ex) {

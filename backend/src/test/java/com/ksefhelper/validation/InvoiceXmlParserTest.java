@@ -40,6 +40,7 @@ class InvoiceXmlParserTest {
         assertThat(invoice.vatAmount()).isEqualByComparingTo(new BigDecimal("383.38"));
         assertThat(invoice.grossAmount()).isEqualByComparingTo(new BigDecimal("2051"));
         assertThat(invoice.paymentMethod()).isEqualTo("TRANSFER");
+        assertThat(invoice.invoiceType()).isEqualTo("VAT");
         assertThat(invoice.items()).hasSize(3);
     }
 
@@ -88,6 +89,7 @@ class InvoiceXmlParserTest {
                         <P_13_3>0.95</P_13_3>
                         <P_14_3>0.05</P_14_3>
                         <P_15>2051</P_15>
+                        <RodzajFaktury>VAT</RodzajFaktury>
                         <FaWiersz>
                             <P_7>lodowka Zimnotech mk1</P_7>
                             <P_8B>1</P_8B>

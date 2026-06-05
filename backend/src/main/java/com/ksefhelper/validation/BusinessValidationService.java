@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class BusinessValidationService {
@@ -42,13 +43,17 @@ public class BusinessValidationService {
             ));
         }
 
-        if (invoice.grossAmount() == null || invoice.grossAmount().compareTo(BigDecimal.ZERO) <= 0) {
+        boolean correctionInvoice = isCorrectionInvoice(invoice);
+        if (invoice.grossAmount() == null) {
             issues.add(error("GROSS_AMOUNT_INVALID", "totals.grossAmount", "Gross amount must be greater than zero.", "Check invoice totals."));
         }
-        if (invoice.netAmount() != null && invoice.netAmount().compareTo(BigDecimal.ZERO) < 0) {
+        if (!correctionInvoice && invoice.grossAmount() != null && invoice.grossAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            issues.add(error("GROSS_AMOUNT_INVALID", "totals.grossAmount", "Gross amount must be greater than zero.", "Check invoice totals."));
+        }
+        if (!correctionInvoice && invoice.netAmount() != null && invoice.netAmount().compareTo(BigDecimal.ZERO) < 0) {
             issues.add(error("NET_AMOUNT_NEGATIVE", "totals.netAmount", "Net amount cannot be negative.", "Check invoice totals."));
         }
-        if (invoice.vatAmount() != null && invoice.vatAmount().compareTo(BigDecimal.ZERO) < 0) {
+        if (!correctionInvoice && invoice.vatAmount() != null && invoice.vatAmount().compareTo(BigDecimal.ZERO) < 0) {
             issues.add(error("VAT_AMOUNT_NEGATIVE", "totals.vatAmount", "VAT amount cannot be negative.", "Check invoice totals."));
         }
         if (invoice.netAmount() != null && invoice.vatAmount() != null && invoice.grossAmount() != null) {
@@ -81,6 +86,7 @@ public class BusinessValidationService {
         }
 
         BigDecimal itemGrossTotal = BigDecimal.ZERO;
+        boolean hasItemGrossAmount = false;
         for (int i = 0; i < items.size(); i++) {
             ParsedInvoiceItem item = items.get(i);
             String prefix = "items[" + i + "]";
@@ -100,10 +106,11 @@ public class BusinessValidationService {
             }
             if (item.grossAmount() != null) {
                 itemGrossTotal = itemGrossTotal.add(item.grossAmount());
+                hasItemGrossAmount = true;
             }
         }
 
-        if (invoice.grossAmount() != null && itemGrossTotal.compareTo(BigDecimal.ZERO) > 0) {
+        if (invoice.grossAmount() != null && hasItemGrossAmount) {
             BigDecimal expected = itemGrossTotal.setScale(2, RoundingMode.HALF_UP);
             BigDecimal actual = invoice.grossAmount().setScale(2, RoundingMode.HALF_UP);
             if (expected.subtract(actual).abs().compareTo(ROUNDING_TOLERANCE) > 0) {
@@ -149,6 +156,11 @@ public class BusinessValidationService {
         return COMMON_POLISH_VAT_RATES.stream()
                 .map(BigDecimal::stripTrailingZeros)
                 .anyMatch(rate -> rate.compareTo(normalized) == 0);
+    }
+
+    private boolean isCorrectionInvoice(ParsedInvoice invoice) {
+        String invoiceType = invoice.invoiceType();
+        return invoiceType != null && invoiceType.toUpperCase(Locale.ROOT).contains("KOR");
     }
 
     private ValidationIssue error(String code, String field, String message, String suggestion) {

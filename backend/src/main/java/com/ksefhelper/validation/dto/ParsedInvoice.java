@@ -18,10 +18,12 @@ public record ParsedInvoice(
         BigDecimal grossAmount,
         String paymentMethod,
         String bankAccount,
+        String invoiceType,
         List<ParsedInvoiceItem> items
 ) {
     public static ParsedInvoice empty() {
         return new ParsedInvoice(
+                null,
                 null,
                 null,
                 null,
