@@ -76,7 +76,7 @@ public class XmlTechnicalValidationService {
             DocumentBuilder builder = XmlSecurity.secureDocumentBuilderFactory().newDocumentBuilder();
             Document document = builder.parse(xmlFile);
             String localName = document.getDocumentElement().getLocalName();
-            return Optional.ofNullable(localName == null ? document.getDocumentElement().getNodeName() : localName);
+            return Optional.of(localName == null ? document.getDocumentElement().getNodeName() : localName);
         } catch (Exception ex) {
             return Optional.empty();
         }
