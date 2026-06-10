@@ -7,7 +7,7 @@ public record ParsedInvoiceItem(
         BigDecimal quantity,
         BigDecimal unitPrice,
         BigDecimal netAmount,
-        BigDecimal vatRate,
+        String vatRate,
         BigDecimal vatAmount,
         BigDecimal grossAmount
 ) {

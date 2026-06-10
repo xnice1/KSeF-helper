@@ -11,15 +11,26 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class BusinessValidationService {
     private static final BigDecimal ROUNDING_TOLERANCE = new BigDecimal("0.02");
-    private static final List<BigDecimal> COMMON_POLISH_VAT_RATES = List.of(
-            new BigDecimal("0"),
-            new BigDecimal("5"),
-            new BigDecimal("8"),
-            new BigDecimal("23")
+    private static final Set<String> FA3_VAT_RATES = Set.of(
+            "23",
+            "22",
+            "8",
+            "7",
+            "5",
+            "4",
+            "3",
+            "0 KR",
+            "0 WDT",
+            "0 EX",
+            "ZW",
+            "OO",
+            "NP I",
+            "NP II"
     );
 
     public List<ValidationIssue> validate(ParsedInvoice invoice) {
@@ -151,11 +162,8 @@ public class BusinessValidationService {
                 || normalized.contains("wire");
     }
 
-    private boolean isCommonVatRate(BigDecimal value) {
-        BigDecimal normalized = value.stripTrailingZeros();
-        return COMMON_POLISH_VAT_RATES.stream()
-                .map(BigDecimal::stripTrailingZeros)
-                .anyMatch(rate -> rate.compareTo(normalized) == 0);
+    private boolean isCommonVatRate(String value) {
+        return FA3_VAT_RATES.contains(value.trim().toUpperCase(Locale.ROOT));
     }
 
     private boolean isCorrectionInvoice(ParsedInvoice invoice) {

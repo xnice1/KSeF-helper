@@ -1,17 +1,24 @@
 package com.ksefhelper.validation;
 
 import com.ksefhelper.validation.dto.ParsedInvoice;
+import com.ksefhelper.validation.dto.ParsedInvoiceItem;
+import com.ksefhelper.validation.entity.ValidationSeverity;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
 import java.math.BigDecimal;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class InvoiceXmlParserTest {
     private final InvoiceXmlParser parser = new InvoiceXmlParser();
+    private final BusinessValidationService businessValidationService = new BusinessValidationService();
 
     @Test
     void parsesSampleInvoice() {
@@ -42,6 +49,72 @@ class InvoiceXmlParserTest {
         assertThat(invoice.paymentMethod()).isEqualTo("TRANSFER");
         assertThat(invoice.invoiceType()).isEqualTo("VAT");
         assertThat(invoice.items()).hasSize(3);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("officialSamples")
+    void parsesAndBusinessChecksEveryOfficialFa3Sample(Path sample) {
+        ParsedInvoice invoice = parser.parse(sample.toFile());
+
+        assertThat(invoice.invoiceNumber()).isNotBlank();
+        assertThat(invoice.issueDate()).isNotNull();
+        assertThat(invoice.sellerName()).isNotBlank();
+        assertThat(invoice.currency()).isNotBlank();
+        assertThat(invoice.invoiceType()).isNotBlank();
+        assertThat(businessValidationService.validate(invoice))
+                .noneMatch(issue -> issue.severity() == ValidationSeverity.ERROR);
+    }
+
+    @Test
+    void handlesCorrectionAdvanceSettlementForeignCurrencyAndExemptSamples() {
+        ParsedInvoice correction = parseOfficial("FA_3_Przykład_2.xml");
+        ParsedInvoice advance = parseOfficial("FA_3_Przykład_10.xml");
+        ParsedInvoice settlement = parseOfficial("Fa_3_Przykład_14.xml");
+        ParsedInvoice foreignCurrency = parseOfficial("Fa_3_Przykład_20.xml");
+        ParsedInvoice exempt = parseOfficial("FA_3_Przykład_9.xml");
+
+        assertThat(correction.invoiceType()).isEqualTo("KOR");
+        assertThat(correction.grossAmount()).isEqualByComparingTo("-200");
+        assertThat(businessValidationService.validate(correction))
+                .noneMatch(issue -> issue.code().equals("GROSS_AMOUNT_INVALID"));
+
+        assertThat(advance.invoiceType()).isEqualTo("ZAL");
+        assertThat(advance.grossAmount()).isEqualByComparingTo("20000");
+
+        assertThat(settlement.invoiceType()).isEqualTo("ROZ");
+        assertThat(settlement.items()).hasSize(2);
+        assertThat(settlement.grossAmount()).isEqualByComparingTo("307635");
+
+        assertThat(foreignCurrency.currency()).isEqualTo("EUR");
+        assertThat(foreignCurrency.vatAmount()).isEqualByComparingTo("3118.80");
+
+        assertThat(exempt.items())
+                .extracting(ParsedInvoiceItem::vatRate)
+                .contains("zw");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"zw", "0 WDT", "0 EX", "oo", "np I", "np II"})
+    void preservesTextualFa3VatRates(String vatRate) throws Exception {
+        File file = File.createTempFile("fa3-vat-rate", ".xml");
+        java.nio.file.Files.writeString(file.toPath(), """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                    <Fa>
+                        <P_2>FV/1</P_2>
+                        <FaWiersz>
+                            <P_7>Service</P_7>
+                            <P_12>%s</P_12>
+                        </FaWiersz>
+                    </Fa>
+                </Faktura>
+                """.formatted(vatRate));
+
+        ParsedInvoice invoice = parser.parse(file);
+
+        assertThat(invoice.items()).singleElement()
+                .extracting(ParsedInvoiceItem::vatRate)
+                .isEqualTo(vatRate);
     }
 
     @Test
@@ -118,5 +191,13 @@ class InvoiceXmlParserTest {
                 </Faktura>
                 """);
         return file;
+    }
+
+    private ParsedInvoice parseOfficial(String filename) {
+        return parser.parse(OfficialFa3Samples.named(filename).toFile());
+    }
+
+    static Stream<Path> officialSamples() {
+        return OfficialFa3Samples.all();
     }
 }

@@ -28,7 +28,8 @@ public class InvoiceItem {
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal netAmount;
-    private BigDecimal vatRate;
+    @Column(length = 20)
+    private String vatRate;
     private BigDecimal vatAmount;
     private BigDecimal grossAmount;
 
@@ -76,11 +77,11 @@ public class InvoiceItem {
         this.netAmount = netAmount;
     }
 
-    public BigDecimal getVatRate() {
+    public String getVatRate() {
         return vatRate;
     }
 
-    public void setVatRate(BigDecimal vatRate) {
+    public void setVatRate(String vatRate) {
         this.vatRate = vatRate;
     }
 

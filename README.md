@@ -261,6 +261,19 @@ backend/src/test/resources/sample-invoices/fa3-official/
 
 The runtime validates uploads against the official schema through a timeout-bound `lxml` worker. The Java XML parser still performs the initial well-formedness and XXE safety checks before the worker starts.
 
+## Tests
+
+Backend tests require a working Python installation with `lxml`. The upload integration tests also require Docker because they start a disposable PostgreSQL container.
+
+```bash
+cd backend
+mvn test -Dxml.validator.command=python
+```
+
+On Linux, use `python3` if that is the installed executable. The test suite validates all 26 bundled official FA(3) examples against the XSD, parses and business-checks each example, and exercises invoice upload through the real HTTP API, PostgreSQL, Flyway, and filesystem storage.
+
+The GitHub Actions workflow under `.github/workflows/ci.yml` runs the mandatory FA(3) validator tests and the frontend production build on every push and pull request.
+
 ## Roadmap
 
 - Official KSeF API integration

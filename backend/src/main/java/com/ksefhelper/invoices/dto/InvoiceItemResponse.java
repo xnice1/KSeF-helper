@@ -9,7 +9,7 @@ public record InvoiceItemResponse(
         BigDecimal quantity,
         BigDecimal unitPrice,
         BigDecimal netAmount,
-        BigDecimal vatRate,
+        String vatRate,
         BigDecimal vatAmount,
         BigDecimal grossAmount
 ) {

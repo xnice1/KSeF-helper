@@ -13,8 +13,8 @@ public final class InvoiceSpecifications {
     }
 
     public static Specification<Invoice> filtered(UUID organizationId, InvoiceFilterRequest filter) {
-        return Specification.where(organization(organizationId))
-                .and(containsIgnoreCase("invoiceNumber", filter.invoiceNumber()))
+        return organization(organizationId)
+                .and(invoiceNumberContains(filter.invoiceNumber()))
                 .and(equalsText("sellerNip", filter.sellerNip()))
                 .and(equalsText("buyerNip", filter.buyerNip()))
                 .and(filter.companyId() == null ? null : (root, query, cb) -> cb.equal(root.get("company").get("id"), filter.companyId()))
@@ -32,12 +32,12 @@ public final class InvoiceSpecifications {
         return (root, query, cb) -> cb.equal(root.get("organization").get("id"), organizationId);
     }
 
-    private static Specification<Invoice> containsIgnoreCase(String field, String value) {
+    private static Specification<Invoice> invoiceNumberContains(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
         String pattern = "%" + value.trim().toLowerCase() + "%";
-        return (root, query, cb) -> cb.like(cb.lower(root.get(field)), pattern);
+        return (root, query, cb) -> cb.like(cb.lower(root.get("invoiceNumber")), pattern);
     }
 
     private static Specification<Invoice> equalsText(String field, String value) {

@@ -5,6 +5,8 @@ import com.ksefhelper.validation.dto.ParsedInvoiceItem;
 import com.ksefhelper.validation.dto.ValidationIssue;
 import com.ksefhelper.validation.entity.ValidationSeverity;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -69,7 +71,7 @@ class BusinessValidationServiceTest {
                         BigDecimal.ONE,
                         new BigDecimal("-100.00"),
                         new BigDecimal("-100.00"),
-                        new BigDecimal("23"),
+                        "23",
                         new BigDecimal("-23.00"),
                         new BigDecimal("-123.00")
                 ))
@@ -101,7 +103,7 @@ class BusinessValidationServiceTest {
                 "przelew",
                 null,
                 "VAT",
-                List.of(item(new BigDecimal("23"), new BigDecimal("23.00"), new BigDecimal("123.00")))
+                List.of(item("23", new BigDecimal("23.00"), new BigDecimal("123.00")))
         );
 
         List<ValidationIssue> issues = service.validate(invoice);
@@ -128,13 +130,39 @@ class BusinessValidationServiceTest {
                 "card",
                 null,
                 "VAT",
-                List.of(item(new BigDecimal("10"), null, new BigDecimal("110.00")))
+                List.of(item("10", null, new BigDecimal("110.00")))
         );
 
         List<ValidationIssue> issues = service.validate(invoice);
 
         assertThat(issues)
                 .anyMatch(issue -> issue.code().equals("ITEM_VAT_RATE_UNUSUAL"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"23", "22", "8", "7", "5", "4", "3", "0 KR", "0 WDT", "0 EX", "zw", "oo", "np I", "np II"})
+    void acceptsEveryOfficialFa3VatRate(String vatRate) {
+        ParsedInvoice invoice = new ParsedInvoice(
+                "FV/1",
+                LocalDate.of(2026, 1, 15),
+                LocalDate.of(2026, 1, 15),
+                "Seller",
+                "5250000000",
+                "Buyer",
+                "5210000000",
+                "PLN",
+                new BigDecimal("100.00"),
+                new BigDecimal("23.00"),
+                new BigDecimal("123.00"),
+                "card",
+                null,
+                "VAT",
+                List.of(item(vatRate, null, new BigDecimal("123.00")))
+        );
+
+        assertThat(service.validate(invoice))
+                .noneMatch(issue -> issue.code().equals("ITEM_VAT_RATE_MISSING"))
+                .noneMatch(issue -> issue.code().equals("ITEM_VAT_RATE_UNUSUAL"));
     }
 
     private ParsedInvoice invoice(BigDecimal net, BigDecimal vat, BigDecimal gross) {
@@ -153,11 +181,11 @@ class BusinessValidationServiceTest {
                 "TRANSFER",
                 "12105000997603123456789123",
                 "VAT",
-                List.of(new ParsedInvoiceItem("Service", BigDecimal.ONE, net, net, new BigDecimal("23"), vat, gross))
+                List.of(new ParsedInvoiceItem("Service", BigDecimal.ONE, net, net, "23", vat, gross))
         );
     }
 
-    private ParsedInvoiceItem item(BigDecimal vatRate, BigDecimal vatAmount, BigDecimal grossAmount) {
+    private ParsedInvoiceItem item(String vatRate, BigDecimal vatAmount, BigDecimal grossAmount) {
         return new ParsedInvoiceItem(
                 "Service",
                 BigDecimal.ONE,

@@ -65,7 +65,7 @@ export type InvoiceItem = {
   quantity?: number | null;
   unitPrice?: number | null;
   netAmount?: number | null;
-  vatRate?: number | null;
+  vatRate?: string | null;
   vatAmount?: number | null;
   grossAmount?: number | null;
 };

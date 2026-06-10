@@ -81,7 +81,7 @@ public class InvoiceXmlParser {
                     amount(firstPath(xpath, node, ".//*[local-name()='Quantity']", ".//*[local-name()='P_8B']", ".//*[local-name()='Ilosc']")),
                     amount(firstPath(xpath, node, ".//*[local-name()='UnitPrice']", ".//*[local-name()='P_9A']", ".//*[local-name()='CenaJednostkowa']")),
                     amount(firstPath(xpath, node, ".//*[local-name()='NetAmount']", ".//*[local-name()='P_11']", ".//*[local-name()='Netto']")),
-                    amount(firstPath(xpath, node, ".//*[local-name()='VatRate']", ".//*[local-name()='P_12']", ".//*[local-name()='StawkaVAT']")),
+                    firstPath(xpath, node, ".//*[local-name()='VatRate']", ".//*[local-name()='P_12']", ".//*[local-name()='StawkaVAT']"),
                     amount(firstPath(xpath, node, ".//*[local-name()='VatAmount']", ".//*[local-name()='KwotaVAT']", ".//*[local-name()='VAT']")),
                     amount(firstPath(xpath, node, ".//*[local-name()='GrossAmount']", ".//*[local-name()='Brutto']"))
             ));
