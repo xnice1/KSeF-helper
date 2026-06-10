@@ -3,6 +3,8 @@ package com.ksefhelper.auth;
 import com.ksefhelper.auth.dto.AuthResponse;
 import com.ksefhelper.auth.dto.LoginRequest;
 import com.ksefhelper.auth.dto.RegisterRequest;
+import com.ksefhelper.security.ratelimit.RateLimitService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,9 +19,11 @@ import java.util.UUID;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
+    private final RateLimitService rateLimitService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, RateLimitService rateLimitService) {
         this.authService = authService;
+        this.rateLimitService = rateLimitService;
     }
 
     @PostMapping("/register")
@@ -28,7 +32,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        rateLimitService.checkLogin(request.email(), httpRequest.getRemoteAddr());
         return authService.login(request);
     }
 

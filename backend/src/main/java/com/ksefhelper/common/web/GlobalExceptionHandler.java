@@ -3,6 +3,7 @@ package com.ksefhelper.common.web;
 import com.ksefhelper.common.exception.BadRequestException;
 import com.ksefhelper.common.exception.ForbiddenException;
 import com.ksefhelper.common.exception.NotFoundException;
+import com.ksefhelper.common.exception.RateLimitExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -36,8 +37,16 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    ResponseEntity<ApiError> handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
+    ResponseEntity<ApiError> handleBadCredentials(HttpServletRequest request) {
         return error(HttpStatus.UNAUTHORIZED, "Invalid email or password.", request);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ApiError> handleRateLimit(RateLimitExceededException ex, HttpServletRequest request) {
+        ApiError body = body(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.retryAfterSeconds()))
+                .body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -54,12 +63,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MultipartException.class)
-    ResponseEntity<ApiError> handleMultipart(MultipartException ex, HttpServletRequest request) {
+    ResponseEntity<ApiError> handleMultipart(HttpServletRequest request) {
         return error(HttpStatus.BAD_REQUEST, "The uploaded file could not be processed.", request);
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
+    ResponseEntity<ApiError> handleUnexpected(HttpServletRequest request) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.", request);
     }
 
@@ -68,13 +77,16 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ApiError> error(HttpStatus status, String message, HttpServletRequest request) {
-        ApiError body = new ApiError(
+        return ResponseEntity.status(status).body(body(status, message, request));
+    }
+
+    private ApiError body(HttpStatus status, String message, HttpServletRequest request) {
+        return new ApiError(
                 Instant.now(),
                 status.value(),
                 status.getReasonPhrase(),
                 message,
                 request.getRequestURI()
         );
-        return ResponseEntity.status(status).body(body);
     }
 }

@@ -18,6 +18,7 @@ import com.ksefhelper.organizations.entity.Organization;
 import com.ksefhelper.organizations.OrganizationAuthorizationService;
 import com.ksefhelper.organizations.OrganizationPermission;
 import com.ksefhelper.security.CurrentUserService;
+import com.ksefhelper.security.ratelimit.RateLimitService;
 import com.ksefhelper.validation.BusinessValidationService;
 import com.ksefhelper.validation.InvoiceXmlParser;
 import com.ksefhelper.validation.XmlTechnicalValidationService;
@@ -53,6 +54,7 @@ public class InvoiceService {
     private final BusinessValidationService businessValidationService;
     private final InvoiceMapper invoiceMapper;
     private final OrganizationAuthorizationService authorizationService;
+    private final RateLimitService rateLimitService;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
@@ -65,7 +67,8 @@ public class InvoiceService {
             InvoiceXmlParser invoiceXmlParser,
             BusinessValidationService businessValidationService,
             InvoiceMapper invoiceMapper,
-            OrganizationAuthorizationService authorizationService
+            OrganizationAuthorizationService authorizationService,
+            RateLimitService rateLimitService
     ) {
         this.invoiceRepository = invoiceRepository;
         this.validationResultRepository = validationResultRepository;
@@ -78,12 +81,14 @@ public class InvoiceService {
         this.businessValidationService = businessValidationService;
         this.invoiceMapper = invoiceMapper;
         this.authorizationService = authorizationService;
+        this.rateLimitService = rateLimitService;
     }
 
     @Transactional
     public UploadInvoiceResponse upload(MultipartFile multipartFile, UUID companyId) {
         authorizationService.require(OrganizationPermission.UPLOAD_INVOICES);
         Organization organization = currentUserService.currentOrganization();
+        rateLimitService.checkUpload(currentUserService.currentUser().getId(), organization.getId());
         Company company = companyId == null ? null : companyService.findScoped(companyId);
         StoredFile storedFile = fileStorageService.storeXml(multipartFile, organization);
         File xmlFile = new File(storedFile.getStoragePath());

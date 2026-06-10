@@ -141,6 +141,12 @@ MAX_UPLOAD_BYTES=10485760
 XML_XSD_PATH=classpath:xsd/schemat_fa_vat-3-_v1-0.xsd
 XML_VALIDATOR_COMMAND=python3
 XML_VALIDATION_TIMEOUT=10s
+RATE_LIMIT_ENABLED=true
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS=5
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP=30
+LOGIN_RATE_LIMIT_WINDOW=1m
+UPLOAD_RATE_LIMIT_MAX_REQUESTS=20
+UPLOAD_RATE_LIMIT_WINDOW=1m
 ```
 
 Frontend:
@@ -148,6 +154,10 @@ Frontend:
 ```text
 VITE_API_URL=http://localhost:8080/api
 ```
+
+Login attempts are limited by both client address and normalized email address. Invoice uploads are limited per user and organization. Rejected requests return HTTP `429` with a `Retry-After` header.
+
+The built-in limiter stores counters in the backend process and is suitable for local development and a single backend instance. A multi-instance production deployment must use a shared limiter such as Redis or enforce equivalent limits at a trusted API gateway. Configure Spring's forwarded-header handling when a reverse proxy is responsible for supplying the real client address.
 
 ## Troubleshooting
 

@@ -34,3 +34,12 @@ app:
     validator-script: classpath:xml-validator/validate_fa3.py
     validator-command: ${XML_VALIDATOR_COMMAND:python3}
     validation-timeout: ${XML_VALIDATION_TIMEOUT:10s}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    login:
+      max-attempts: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:5}
+      max-attempts-per-ip: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP:30}
+      window: ${LOGIN_RATE_LIMIT_WINDOW:1m}
+    upload:
+      max-requests: ${UPLOAD_RATE_LIMIT_MAX_REQUESTS:20}
+      window: ${UPLOAD_RATE_LIMIT_WINDOW:1m}

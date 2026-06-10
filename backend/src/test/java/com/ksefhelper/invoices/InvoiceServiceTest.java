@@ -6,6 +6,7 @@ import com.ksefhelper.invoices.entity.Invoice;
 import com.ksefhelper.invoices.entity.InvoiceStatus;
 import com.ksefhelper.invoices.repository.InvoiceRepository;
 import com.ksefhelper.security.CurrentUserService;
+import com.ksefhelper.security.ratelimit.RateLimitService;
 import com.ksefhelper.organizations.OrganizationAuthorizationService;
 import com.ksefhelper.validation.BusinessValidationService;
 import com.ksefhelper.validation.InvoiceXmlParser;
@@ -107,7 +108,8 @@ class InvoiceServiceTest {
                 new InvoiceXmlParser(),
                 new BusinessValidationService(),
                 new InvoiceMapper(),
-                mock(OrganizationAuthorizationService.class)
+                mock(OrganizationAuthorizationService.class),
+                mock(RateLimitService.class)
         );
 
         InvoiceValidationResponse response = service.revalidate(invoiceId);
