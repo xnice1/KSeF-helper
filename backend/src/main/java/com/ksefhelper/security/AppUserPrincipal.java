@@ -12,15 +12,29 @@ public class AppUserPrincipal implements UserDetails {
     private final UUID id;
     private final String email;
     private final String passwordHash;
+    private final UUID organizationId;
 
     public AppUserPrincipal(User user) {
-        this.id = user.getId();
-        this.email = user.getEmail();
-        this.passwordHash = user.getPasswordHash();
+        this(user.getId(), user.getEmail(), user.getPasswordHash(), null);
+    }
+
+    private AppUserPrincipal(UUID id, String email, String passwordHash, UUID organizationId) {
+        this.id = id;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.organizationId = organizationId;
     }
 
     public UUID id() {
         return id;
+    }
+
+    public UUID organizationId() {
+        return organizationId;
+    }
+
+    public AppUserPrincipal withOrganizationId(UUID activeOrganizationId) {
+        return new AppUserPrincipal(id, email, passwordHash, activeOrganizationId);
     }
 
     @Override

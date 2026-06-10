@@ -3,8 +3,12 @@ import { Download, FileWarning, RefreshCw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../auth/AuthProvider";
+import { hasPermission } from "../auth/permissions";
 
 export function InvoiceDetailsPage() {
+  const { auth } = useAuth();
+  const canRevalidate = hasPermission(auth?.organization?.role, "revalidateInvoices");
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { data: preview, isLoading } = useQuery({
@@ -46,14 +50,14 @@ export function InvoiceDetailsPage() {
           <p className="mt-1 text-sm text-neutral-600">Uploaded {new Date(preview.uploadedAt).toLocaleString()}</p>
         </div>
         <div className="flex gap-2">
-          <button
+          {canRevalidate ? <button
             className="focus-ring inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-neutral-700"
             disabled={revalidate.isPending}
             onClick={() => revalidate.mutate()}
           >
             <RefreshCw className={revalidate.isPending ? "animate-spin" : ""} size={16} />
             {revalidate.isPending ? "Revalidating..." : "Revalidate"}
-          </button>
+          </button> : null}
           <Link className="focus-ring rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-neutral-700" to={`/app/validation/${preview.id}`}>
             Validation
           </Link>

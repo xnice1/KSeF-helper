@@ -7,6 +7,8 @@ import { z } from "zod";
 import { api, CompanyPayload } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import type { Company } from "../types/api";
+import { useAuth } from "../auth/AuthProvider";
+import { hasPermission } from "../auth/permissions";
 
 const schema = z.object({
   name: z.string().min(1),
@@ -23,6 +25,8 @@ type FormValues = z.infer<typeof schema>;
 const empty: FormValues = { name: "", nip: "", regon: "", street: "", city: "", postalCode: "", country: "PL" };
 
 export function CompaniesPage() {
+  const { auth } = useAuth();
+  const canManage = hasPermission(auth?.organization?.role, "manageCompanies");
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Company | null>(null);
   const { data: companies = [] } = useQuery({ queryKey: ["companies"], queryFn: api.companies });
@@ -70,14 +74,14 @@ export function CompaniesPage() {
                     <p className="font-bold text-ink">{company.name}</p>
                     <p className="text-sm text-neutral-600">NIP {company.nip} · {company.city}, {company.country}</p>
                   </div>
-                  <div className="flex gap-2">
+                  {canManage ? <div className="flex gap-2">
                     <button className="focus-ring rounded-md border border-line p-2 text-neutral-700" onClick={() => edit(company)} title="Edit">
                       <Edit2 size={17} />
                     </button>
                     <button className="focus-ring rounded-md border border-line p-2 text-rose-700" onClick={() => remove.mutate(company.id)} title="Delete">
                       <Trash2 size={17} />
                     </button>
-                  </div>
+                  </div> : null}
                 </div>
               ))}
             </div>
@@ -85,7 +89,7 @@ export function CompaniesPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-line bg-white p-5 shadow-soft">
+      {canManage ? <section className="rounded-lg border border-line bg-white p-5 shadow-soft">
         <h2 className="font-bold text-ink">{editing ? "Edit company" : "Create company"}</h2>
         <form className="mt-4 space-y-3" onSubmit={handleSubmit((values) => save.mutate(values))}>
           {[
@@ -123,7 +127,7 @@ export function CompaniesPage() {
             ) : null}
           </div>
         </form>
-      </section>
+      </section> : null}
     </div>
   );
 }

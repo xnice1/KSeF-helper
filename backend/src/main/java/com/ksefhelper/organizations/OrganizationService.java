@@ -2,7 +2,6 @@ package com.ksefhelper.organizations;
 
 import com.ksefhelper.common.exception.BadRequestException;
 import com.ksefhelper.common.exception.ForbiddenException;
-import com.ksefhelper.common.exception.NotFoundException;
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
 import com.ksefhelper.organizations.dto.MembershipResponse;
 import com.ksefhelper.organizations.dto.OrganizationRequest;
@@ -27,27 +26,32 @@ public class OrganizationService {
     private final MembershipRepository membershipRepository;
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
+    private final OrganizationAuthorizationService authorizationService;
 
     public OrganizationService(
             CurrentUserService currentUserService,
             MembershipRepository membershipRepository,
             OrganizationRepository organizationRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            OrganizationAuthorizationService authorizationService
     ) {
         this.currentUserService = currentUserService;
         this.membershipRepository = membershipRepository;
         this.organizationRepository = organizationRepository;
         this.userRepository = userRepository;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional(readOnly = true)
     public OrganizationResponse current() {
+        authorizationService.require(OrganizationPermission.VIEW_ORGANIZATION);
         Organization organization = currentUserService.currentOrganization();
         return new OrganizationResponse(organization.getId(), organization.getName(), organization.getType());
     }
 
     @Transactional(readOnly = true)
     public List<MembershipResponse> members() {
+        authorizationService.require(OrganizationPermission.VIEW_MEMBERS);
         return membershipRepository.findAllByOrganizationId(currentUserService.currentOrganizationId()).stream()
                 .map(this::toResponse)
                 .toList();
@@ -73,7 +77,8 @@ public class OrganizationService {
 
     @Transactional(readOnly = true)
     public List<MembershipResponse> members(UUID organizationId) {
-        ensureCurrentUserBelongsTo(organizationId);
+        ensureActiveOrganization(organizationId);
+        authorizationService.require(OrganizationPermission.VIEW_MEMBERS);
         return membershipRepository.findAllByOrganizationId(organizationId).stream()
                 .map(this::toResponse)
                 .toList();
@@ -81,12 +86,11 @@ public class OrganizationService {
 
     @Transactional
     public MembershipResponse invite(UUID organizationId, InviteMemberRequest request) {
-        Membership currentMembership = ensureCurrentUserBelongsTo(organizationId);
-        if (currentMembership.getRole() != MembershipRole.OWNER && currentMembership.getRole() != MembershipRole.ACCOUNTANT) {
-            throw new ForbiddenException("Only owners and accountants can invite organization members.");
-        }
-        if (request.role() == MembershipRole.OWNER && currentMembership.getRole() != MembershipRole.OWNER) {
-            throw new ForbiddenException("Only an owner can invite another owner.");
+        Membership currentMembership = ensureActiveOrganization(organizationId);
+        authorizationService.require(OrganizationPermission.INVITE_MEMBERS);
+        if (currentMembership.getRole() == MembershipRole.ACCOUNTANT
+                && (request.role() == MembershipRole.OWNER || request.role() == MembershipRole.ACCOUNTANT)) {
+            throw new ForbiddenException("Accountants can invite clients and employees only.");
         }
 
         Organization organization = currentMembership.getOrganization();
@@ -103,12 +107,12 @@ public class OrganizationService {
         return toResponse(membershipRepository.save(membership));
     }
 
-    private Membership ensureCurrentUserBelongsTo(UUID organizationId) {
-        Organization organization = organizationRepository.findById(organizationId)
-                .orElseThrow(() -> new NotFoundException("Organization was not found."));
-        User user = currentUserService.currentUser();
-        return membershipRepository.findByUserIdAndOrganizationId(user.getId(), organization.getId())
-                .orElseThrow(() -> new ForbiddenException("You do not have access to this organization."));
+    private Membership ensureActiveOrganization(UUID organizationId) {
+        Membership membership = currentUserService.currentMembership();
+        if (!membership.getOrganization().getId().equals(organizationId)) {
+            throw new ForbiddenException("Switch to this organization before accessing it.");
+        }
+        return membership;
     }
 
     private OrganizationResponse toResponse(Organization organization) {

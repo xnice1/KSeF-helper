@@ -45,6 +45,8 @@ Infrastructure:
 - User registration and login
 - Automatic organization creation after registration
 - Organization roles: `OWNER`, `ACCOUNTANT`, `CLIENT`, `EMPLOYEE`
+- Explicit organization switching for users who belong to multiple workspaces
+- Organization-scoped JWT context with database-backed role authorization
 - Company profile CRUD
 - XML invoice upload
 - Original XML file storage
@@ -194,6 +196,24 @@ Organizations:
 - `POST /api/organizations`
 - `GET /api/organizations/{id}/members`
 - `POST /api/organizations/{id}/invite`
+
+Authentication:
+
+- `POST /api/auth/switch-organization/{organizationId}`
+
+Users with multiple memberships receive an authenticated but unscoped token after login and must select an organization before using organization data endpoints.
+
+## Role Permissions
+
+| Capability | Owner | Accountant | Employee | Client |
+| --- | --- | --- | --- | --- |
+| View organization, companies, invoices and reports | Yes | Yes | Yes | Yes |
+| View members | Yes | Yes | No | No |
+| Invite members | Any role | Client/employee only | No | No |
+| Manage companies | Yes | Yes | No | No |
+| Upload and revalidate invoices | Yes | Yes | Yes | No |
+| Delete invoices | Yes | Yes | No | No |
+| Download original XML | Yes | Yes | Yes | Yes |
 
 Companies:
 

@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -28,9 +30,14 @@ public class JwtService {
 
     public String generateToken(AppUserPrincipal principal) {
         Instant now = Instant.now();
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", principal.id().toString());
+        if (principal.organizationId() != null) {
+            claims.put("organizationId", principal.organizationId().toString());
+        }
         return Jwts.builder()
                 .subject(principal.getUsername())
-                .claims(Map.of("userId", principal.id().toString()))
+                .claims(claims)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(expirationMs)))
                 .signWith(signingKey)
@@ -39,6 +46,11 @@ public class JwtService {
 
     public String extractUsername(String token) {
         return claims(token).getSubject();
+    }
+
+    public UUID extractOrganizationId(String token) {
+        String value = claims(token).get("organizationId", String.class);
+        return value == null ? null : UUID.fromString(value);
     }
 
     public boolean isValid(String token, UserDetails userDetails) {

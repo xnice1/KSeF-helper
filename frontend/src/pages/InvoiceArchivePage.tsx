@@ -5,8 +5,13 @@ import { Link } from "react-router-dom";
 import { api, InvoiceFilters } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../auth/AuthProvider";
+import { hasPermission } from "../auth/permissions";
 
 export function InvoiceArchivePage() {
+  const { auth } = useAuth();
+  const canUpload = hasPermission(auth?.organization?.role, "uploadInvoices");
+  const canDelete = hasPermission(auth?.organization?.role, "deleteInvoices");
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<InvoiceFilters>({});
   const [draft, setDraft] = useState<InvoiceFilters>({});
@@ -29,9 +34,11 @@ export function InvoiceArchivePage() {
           <h1 className="text-2xl font-bold text-ink">Invoice archive</h1>
           <p className="mt-1 text-sm text-neutral-600">Search and filter uploaded XML invoices.</p>
         </div>
-        <Link className="focus-ring rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" to="/app/upload">
-          Upload XML
-        </Link>
+        {canUpload ? (
+          <Link className="focus-ring rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" to="/app/upload">
+            Upload XML
+          </Link>
+        ) : null}
       </div>
       <form className="grid gap-3 rounded-lg border border-line bg-white p-4 shadow-soft md:grid-cols-4" onSubmit={submit}>
         <Input label="Invoice number" value={draft.invoiceNumber} onChange={(invoiceNumber) => setDraft({ ...draft, invoiceNumber })} />
@@ -104,9 +111,11 @@ export function InvoiceArchivePage() {
                     <td className="py-3 pr-4"><StatusBadge status={invoice.status} /></td>
                     <td className="py-3 pr-4">{new Date(invoice.createdAt).toLocaleDateString()}</td>
                     <td className="py-3 pr-4">
+                      {canDelete ? (
                       <button className="focus-ring rounded-md border border-line p-2 text-rose-700" onClick={() => remove.mutate(invoice.id)} title="Delete">
                         <Trash2 size={16} />
                       </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

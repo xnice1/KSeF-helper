@@ -8,6 +8,7 @@ type AuthContextValue = {
   loading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
+  switchOrganization: (organizationId: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -46,6 +47,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.clear();
         const response = await api.register(payload);
         tokenStore.set(response.token);
+        setAuth(response);
+      },
+      switchOrganization: async (organizationId) => {
+        const response = await api.switchOrganization(organizationId);
+        tokenStore.set(response.token);
+        queryClient.clear();
         setAuth(response);
       },
       logout: () => {

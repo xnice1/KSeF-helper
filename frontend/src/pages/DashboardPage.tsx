@@ -5,6 +5,8 @@ import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
 import type { InvoiceStatus } from "../types/api";
+import { useAuth } from "../auth/AuthProvider";
+import { hasPermission } from "../auth/permissions";
 
 const cards: { label: string; status?: InvoiceStatus; icon: typeof FileText; tone: string }[] = [
   { label: "Total invoices", icon: FileText, tone: "text-neutral-700" },
@@ -14,6 +16,7 @@ const cards: { label: string; status?: InvoiceStatus; icon: typeof FileText; ton
 ];
 
 export function DashboardPage() {
+  const { auth } = useAuth();
   const { data: invoices = [], isLoading } = useQuery({ queryKey: ["invoices"], queryFn: () => api.invoices() });
   const latest = invoices.slice(0, 5);
 
@@ -24,9 +27,11 @@ export function DashboardPage() {
           <h1 className="text-2xl font-bold text-ink">Dashboard</h1>
           <p className="mt-1 text-sm text-neutral-600">Your invoice validation overview.</p>
         </div>
-        <Link className="focus-ring rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" to="/app/upload">
-          Upload XML
-        </Link>
+        {hasPermission(auth?.organization?.role, "uploadInvoices") ? (
+          <Link className="focus-ring rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white" to="/app/upload">
+            Upload XML
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

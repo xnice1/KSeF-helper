@@ -8,9 +8,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface MembershipRepository extends JpaRepository<Membership, UUID> {
-    Optional<Membership> findFirstByUserIdOrderByCreatedAtAsc(UUID userId);
-
     Optional<Membership> findByUserIdAndOrganizationId(UUID userId, UUID organizationId);
+
+    List<Membership> findAllByUserIdOrderByOrganizationNameAsc(UUID userId);
 
     List<Membership> findAllByOrganizationId(UUID organizationId);
 

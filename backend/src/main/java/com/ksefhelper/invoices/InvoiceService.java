@@ -10,12 +10,13 @@ import com.ksefhelper.invoices.dto.InvoiceFilterRequest;
 import com.ksefhelper.invoices.dto.InvoiceSummaryResponse;
 import com.ksefhelper.invoices.dto.InvoiceValidationResponse;
 import com.ksefhelper.invoices.dto.UploadInvoiceResponse;
-import com.ksefhelper.invoices.dto.ValidationMessageResponse;
 import com.ksefhelper.invoices.entity.Invoice;
 import com.ksefhelper.invoices.entity.InvoiceItem;
 import com.ksefhelper.invoices.entity.InvoiceStatus;
 import com.ksefhelper.invoices.repository.InvoiceRepository;
 import com.ksefhelper.organizations.entity.Organization;
+import com.ksefhelper.organizations.OrganizationAuthorizationService;
+import com.ksefhelper.organizations.OrganizationPermission;
 import com.ksefhelper.security.CurrentUserService;
 import com.ksefhelper.validation.BusinessValidationService;
 import com.ksefhelper.validation.InvoiceXmlParser;
@@ -51,6 +52,7 @@ public class InvoiceService {
     private final InvoiceXmlParser invoiceXmlParser;
     private final BusinessValidationService businessValidationService;
     private final InvoiceMapper invoiceMapper;
+    private final OrganizationAuthorizationService authorizationService;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
@@ -62,7 +64,8 @@ public class InvoiceService {
             XmlTechnicalValidationService technicalValidationService,
             InvoiceXmlParser invoiceXmlParser,
             BusinessValidationService businessValidationService,
-            InvoiceMapper invoiceMapper
+            InvoiceMapper invoiceMapper,
+            OrganizationAuthorizationService authorizationService
     ) {
         this.invoiceRepository = invoiceRepository;
         this.validationResultRepository = validationResultRepository;
@@ -74,10 +77,12 @@ public class InvoiceService {
         this.invoiceXmlParser = invoiceXmlParser;
         this.businessValidationService = businessValidationService;
         this.invoiceMapper = invoiceMapper;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional
     public UploadInvoiceResponse upload(MultipartFile multipartFile, UUID companyId) {
+        authorizationService.require(OrganizationPermission.UPLOAD_INVOICES);
         Organization organization = currentUserService.currentOrganization();
         Company company = companyId == null ? null : companyService.findScoped(companyId);
         StoredFile storedFile = fileStorageService.storeXml(multipartFile, organization);
@@ -103,6 +108,7 @@ public class InvoiceService {
 
     @Transactional
     public InvoiceValidationResponse revalidate(UUID id) {
+        authorizationService.require(OrganizationPermission.REVALIDATE_INVOICES);
         Invoice invoice = findScoped(id);
         ValidationResult result = validationResultRepository.findByInvoiceIdAndInvoiceOrganizationId(
                         id,
@@ -131,6 +137,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<InvoiceSummaryResponse> list(InvoiceFilterRequest filter) {
+        authorizationService.require(OrganizationPermission.VIEW_INVOICES);
         UUID organizationId = currentUserService.currentOrganizationId();
         return invoiceRepository.findAll(
                         InvoiceSpecifications.filtered(organizationId, filter),
@@ -142,11 +149,13 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public InvoiceSummaryResponse get(UUID id) {
+        authorizationService.require(OrganizationPermission.VIEW_INVOICES);
         return invoiceMapper.toSummary(findScoped(id));
     }
 
     @Transactional(readOnly = true)
     public com.ksefhelper.invoices.dto.InvoicePreviewResponse preview(UUID id) {
+        authorizationService.require(OrganizationPermission.VIEW_INVOICES);
         Invoice invoice = findScoped(id);
         ValidationResult result = validationResultRepository.findByInvoiceIdAndInvoiceOrganizationId(id, currentUserService.currentOrganizationId())
                 .orElseThrow(() -> new NotFoundException("Validation result was not found."));
@@ -155,6 +164,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public InvoiceValidationResponse validation(UUID id) {
+        authorizationService.require(OrganizationPermission.VIEW_INVOICES);
         ValidationResult result = validationResultRepository.findByInvoiceIdAndInvoiceOrganizationId(id, currentUserService.currentOrganizationId())
                 .orElseThrow(() -> new NotFoundException("Validation result was not found."));
         return new InvoiceValidationResponse(
@@ -167,6 +177,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public DownloadedInvoiceFile downloadOriginal(UUID id) {
+        authorizationService.require(OrganizationPermission.DOWNLOAD_INVOICES);
         Invoice invoice = findScoped(id);
         Resource resource = fileStorageService.load(invoice.getFile());
         return new DownloadedInvoiceFile(resource, invoice.getFile().getOriginalFilename(), invoice.getFile().getContentType());
@@ -174,6 +185,7 @@ public class InvoiceService {
 
     @Transactional
     public void delete(UUID id) {
+        authorizationService.require(OrganizationPermission.DELETE_INVOICES);
         Invoice invoice = findScoped(id);
         StoredFile file = invoice.getFile();
         invoiceRepository.delete(invoice);
@@ -182,6 +194,7 @@ public class InvoiceService {
     }
 
     public Invoice findScoped(UUID id) {
+        authorizationService.require(OrganizationPermission.VIEW_INVOICES);
         return invoiceRepository.findByIdAndOrganizationId(id, currentUserService.currentOrganizationId())
                 .orElseThrow(() -> new NotFoundException("Invoice was not found."));
     }

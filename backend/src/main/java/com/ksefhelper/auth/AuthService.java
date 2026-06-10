@@ -4,6 +4,7 @@ import com.ksefhelper.auth.dto.AuthResponse;
 import com.ksefhelper.auth.dto.LoginRequest;
 import com.ksefhelper.auth.dto.RegisterRequest;
 import com.ksefhelper.common.exception.BadRequestException;
+import com.ksefhelper.common.exception.ForbiddenException;
 import com.ksefhelper.organizations.entity.Membership;
 import com.ksefhelper.organizations.entity.MembershipRole;
 import com.ksefhelper.organizations.entity.Organization;
@@ -21,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -75,7 +78,7 @@ public class AuthService {
         membership.setRole(MembershipRole.OWNER);
         Membership savedMembership = membershipRepository.save(membership);
 
-        return response(savedUser, savedMembership);
+        return response(savedUser, savedMembership, List.of(savedMembership));
     }
 
     @Transactional(readOnly = true)
@@ -87,30 +90,58 @@ public class AuthService {
 
         User user = userRepository.findByEmailIgnoreCase(request.email())
                 .orElseThrow(() -> new BadRequestException("Invalid email or password."));
-        Membership membership = membershipRepository.findFirstByUserIdOrderByCreatedAtAsc(user.getId())
-                .orElseThrow(() -> new BadRequestException("User does not belong to an organization."));
-        return response(user, membership);
+        List<Membership> memberships = memberships(user);
+        Membership membership = memberships.size() == 1 ? memberships.getFirst() : null;
+        return response(user, membership, memberships);
     }
 
     @Transactional(readOnly = true)
     public AuthResponse me() {
         User user = currentUserService.currentUser();
-        Membership membership = currentUserService.currentMembership();
-        return response(user, membership);
+        List<Membership> memberships = memberships(user);
+        Membership activeMembership = null;
+        try {
+            activeMembership = currentUserService.currentMembership();
+        } catch (com.ksefhelper.common.exception.ForbiddenException ignored) {
+            // An unscoped login token is valid while the user selects an organization.
+        }
+        return response(user, activeMembership, memberships);
     }
 
-    private AuthResponse response(User user, Membership membership) {
-        String token = jwtService.generateToken(new AppUserPrincipal(user));
-        Organization organization = membership.getOrganization();
+    @Transactional(readOnly = true)
+    public AuthResponse switchOrganization(UUID organizationId) {
+        User user = currentUserService.currentUser();
+        Membership membership = membershipRepository.findByUserIdAndOrganizationId(user.getId(), organizationId)
+                .orElseThrow(() -> new ForbiddenException("You do not belong to the selected organization."));
+        return response(user, membership, memberships(user));
+    }
+
+    private List<Membership> memberships(User user) {
+        List<Membership> memberships = membershipRepository.findAllByUserIdOrderByOrganizationNameAsc(user.getId());
+        if (memberships.isEmpty()) {
+            throw new BadRequestException("User does not belong to an organization.");
+        }
+        return memberships;
+    }
+
+    private AuthResponse response(User user, Membership membership, List<Membership> memberships) {
+        UUID organizationId = membership == null ? null : membership.getOrganization().getId();
+        String token = jwtService.generateToken(new AppUserPrincipal(user).withOrganizationId(organizationId));
         return new AuthResponse(
                 token,
                 new AuthResponse.UserProfile(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName()),
-                new AuthResponse.OrganizationProfile(
-                        organization.getId(),
-                        organization.getName(),
-                        organization.getType(),
-                        membership.getRole().name()
-                )
+                membership == null ? null : organizationProfile(membership),
+                memberships.stream().map(this::organizationProfile).toList()
+        );
+    }
+
+    private AuthResponse.OrganizationProfile organizationProfile(Membership membership) {
+        Organization organization = membership.getOrganization();
+        return new AuthResponse.OrganizationProfile(
+                organization.getId(),
+                organization.getName(),
+                organization.getType(),
+                membership.getRole().name()
         );
     }
 }

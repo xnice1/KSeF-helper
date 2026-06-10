@@ -4,8 +4,11 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../auth/AuthProvider";
+import { hasPermission } from "../auth/permissions";
 
 export function InvoiceUploadPage() {
+  const { auth } = useAuth();
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [companyId, setCompanyId] = useState("");
@@ -16,6 +19,10 @@ export function InvoiceUploadPage() {
       return api.uploadInvoice(file, companyId || undefined);
     }
   });
+
+  if (!hasPermission(auth?.organization?.role, "uploadInvoices")) {
+    return <p className="rounded-lg border border-line bg-white p-5 text-sm text-neutral-700">Your role cannot upload invoices.</p>;
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();

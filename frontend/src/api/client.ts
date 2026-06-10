@@ -102,6 +102,8 @@ export const api = {
   register: (payload: RegisterPayload) =>
     request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request<AuthResponse>("/auth/me"),
+  switchOrganization: (organizationId: string) =>
+    request<AuthResponse>(`/auth/switch-organization/${organizationId}`, { method: "POST" }),
 
   companies: () => request<Company[]>("/companies"),
   createCompany: (payload: CompanyPayload) =>

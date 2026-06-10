@@ -6,9 +6,12 @@ import com.ksefhelper.auth.dto.RegisterRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -32,5 +35,10 @@ public class AuthController {
     @GetMapping("/me")
     public AuthResponse me() {
         return authService.me();
+    }
+
+    @PostMapping("/switch-organization/{organizationId}")
+    public AuthResponse switchOrganization(@PathVariable UUID organizationId) {
+        return authService.switchOrganization(organizationId);
     }
 }

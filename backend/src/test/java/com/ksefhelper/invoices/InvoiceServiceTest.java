@@ -1,14 +1,12 @@
 package com.ksefhelper.invoices;
 
-import com.ksefhelper.companies.CompanyService;
-import com.ksefhelper.files.FileStorageService;
 import com.ksefhelper.files.entity.StoredFile;
-import com.ksefhelper.files.repository.StoredFileRepository;
 import com.ksefhelper.invoices.dto.InvoiceValidationResponse;
 import com.ksefhelper.invoices.entity.Invoice;
 import com.ksefhelper.invoices.entity.InvoiceStatus;
 import com.ksefhelper.invoices.repository.InvoiceRepository;
 import com.ksefhelper.security.CurrentUserService;
+import com.ksefhelper.organizations.OrganizationAuthorizationService;
 import com.ksefhelper.validation.BusinessValidationService;
 import com.ksefhelper.validation.InvoiceXmlParser;
 import com.ksefhelper.validation.XmlTechnicalValidationService;
@@ -101,14 +99,15 @@ class InvoiceServiceTest {
         InvoiceService service = new InvoiceService(
                 invoiceRepository,
                 validationResultRepository,
-                (StoredFileRepository) null,
-                (FileStorageService) null,
+                null,
+                null,
                 new FixedCurrentUserService(organizationId),
-                (CompanyService) null,
+                null,
                 new XmlTechnicalValidationService(fileToValidate -> validSchemaResult()),
                 new InvoiceXmlParser(),
                 new BusinessValidationService(),
-                new InvoiceMapper()
+                new InvoiceMapper(),
+                mock(OrganizationAuthorizationService.class)
         );
 
         InvoiceValidationResponse response = service.revalidate(invoiceId);

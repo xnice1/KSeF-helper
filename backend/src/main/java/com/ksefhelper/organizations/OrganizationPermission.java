@@ -1,0 +1,15 @@
+package com.ksefhelper.organizations;
+
+public enum OrganizationPermission {
+    VIEW_ORGANIZATION,
+    VIEW_MEMBERS,
+    INVITE_MEMBERS,
+    VIEW_COMPANIES,
+    MANAGE_COMPANIES,
+    VIEW_INVOICES,
+    UPLOAD_INVOICES,
+    REVALIDATE_INVOICES,
+    DELETE_INVOICES,
+    DOWNLOAD_INVOICES,
+    VIEW_REPORTS
+}

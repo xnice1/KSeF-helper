@@ -4,6 +4,8 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../auth/AuthProvider";
+import { hasPermission } from "../auth/permissions";
 
 export function ValidationPage() {
   const { id } = useParams<{ id?: string }>();
@@ -47,6 +49,8 @@ function ValidationIndex() {
 }
 
 function ValidationReport({ invoiceId }: { invoiceId: string }) {
+  const { auth } = useAuth();
+  const canRevalidate = hasPermission(auth?.organization?.role, "revalidateInvoices");
   const queryClient = useQueryClient();
   const { data: report, isLoading } = useQuery({
     queryKey: ["validation-report", invoiceId],
@@ -76,14 +80,14 @@ function ValidationReport({ invoiceId }: { invoiceId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={report.validationStatus} />
-          <button
+          {canRevalidate ? <button
             className="focus-ring inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-neutral-700"
             disabled={revalidate.isPending}
             onClick={() => revalidate.mutate()}
           >
             <RefreshCw className={revalidate.isPending ? "animate-spin" : ""} size={16} />
             {revalidate.isPending ? "Revalidating..." : "Revalidate"}
-          </button>
+          </button> : null}
         </div>
       </div>
       {revalidate.error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{revalidate.error.message}</p> : null}

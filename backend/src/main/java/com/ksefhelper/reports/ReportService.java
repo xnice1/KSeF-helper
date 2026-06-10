@@ -12,6 +12,8 @@ import com.ksefhelper.invoices.repository.InvoiceRepository;
 import com.ksefhelper.reports.dto.MonthlyReportResponse;
 import com.ksefhelper.reports.dto.ValidationReportResponse;
 import com.ksefhelper.security.CurrentUserService;
+import com.ksefhelper.organizations.OrganizationAuthorizationService;
+import com.ksefhelper.organizations.OrganizationPermission;
 import com.ksefhelper.validation.entity.ValidationSeverity;
 import com.ksefhelper.validation.entity.ValidationResult;
 import com.ksefhelper.validation.repository.ValidationResultRepository;
@@ -24,6 +26,7 @@ import java.time.YearMonth;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,23 +37,27 @@ public class ReportService {
     private final CurrentUserService currentUserService;
     private final InvoiceMapper invoiceMapper;
     private final InvoiceRepository invoiceRepository;
+    private final OrganizationAuthorizationService authorizationService;
 
     public ReportService(
             InvoiceService invoiceService,
             ValidationResultRepository validationResultRepository,
             CurrentUserService currentUserService,
             InvoiceMapper invoiceMapper,
-            InvoiceRepository invoiceRepository
+            InvoiceRepository invoiceRepository,
+            OrganizationAuthorizationService authorizationService
     ) {
         this.invoiceService = invoiceService;
         this.validationResultRepository = validationResultRepository;
         this.currentUserService = currentUserService;
         this.invoiceMapper = invoiceMapper;
         this.invoiceRepository = invoiceRepository;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional(readOnly = true)
     public ValidationReportResponse validationReport(UUID invoiceId) {
+        authorizationService.require(OrganizationPermission.VIEW_REPORTS);
         var invoice = invoiceService.findScoped(invoiceId);
         ValidationResult result = validationResultRepository.findByInvoiceIdAndInvoiceOrganizationId(invoiceId, currentUserService.currentOrganizationId())
                 .orElseThrow(() -> new NotFoundException("Validation result was not found."));
@@ -81,6 +88,7 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public MonthlyReportResponse monthlyReport(YearMonth period) {
+        authorizationService.require(OrganizationPermission.VIEW_REPORTS);
         UUID organizationId = currentUserService.currentOrganizationId();
         InvoiceFilterRequest filter = new InvoiceFilterRequest(
                 null,
@@ -126,7 +134,7 @@ public class ReportService {
                     case VAT -> invoice.getVatAmount();
                     case GROSS -> invoice.getGrossAmount();
                 })
-                .filter(amount -> amount != null)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

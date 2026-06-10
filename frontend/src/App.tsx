@@ -10,13 +10,17 @@ import { InvoiceArchivePage } from "./pages/InvoiceArchivePage";
 import { InvoiceDetailsPage } from "./pages/InvoiceDetailsPage";
 import { InvoiceUploadPage } from "./pages/InvoiceUploadPage";
 import { ValidationPage } from "./pages/ValidationPage";
+import { OrganizationSelectionPage } from "./pages/OrganizationSelectionPage";
 
 function Protected() {
   const { auth, loading } = useAuth();
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-paper text-neutral-700">Loading KSeF Helper...</div>;
   }
-  return auth ? <AppLayout /> : <Navigate to="/login" replace />;
+  if (!auth) {
+    return <Navigate to="/login" replace />;
+  }
+  return auth.organization ? <AppLayout /> : <OrganizationSelectionPage />;
 }
 
 function Public({ children }: { children: JSX.Element }) {

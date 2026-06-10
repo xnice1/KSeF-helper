@@ -25,19 +25,19 @@ public class CurrentUserService {
 
     @Transactional(readOnly = true)
     public User currentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null) {
-            throw new ForbiddenException("Authenticated user is required.");
-        }
-        return userRepository.findByEmailIgnoreCase(authentication.getName())
+        AppUserPrincipal principal = currentPrincipal();
+        return userRepository.findByEmailIgnoreCase(principal.getUsername())
                 .orElseThrow(() -> new ForbiddenException("Authenticated user was not found."));
     }
 
     @Transactional(readOnly = true)
     public Membership currentMembership() {
-        User user = currentUser();
-        return membershipRepository.findFirstByUserIdOrderByCreatedAtAsc(user.getId())
-                .orElseThrow(() -> new ForbiddenException("User does not belong to an organization."));
+        AppUserPrincipal principal = currentPrincipal();
+        if (principal.organizationId() == null) {
+            throw new ForbiddenException("Select an organization before using this endpoint.");
+        }
+        return membershipRepository.findByUserIdAndOrganizationId(principal.id(), principal.organizationId())
+                .orElseThrow(() -> new ForbiddenException("You do not have access to the selected organization."));
     }
 
     @Transactional(readOnly = true)
@@ -48,5 +48,13 @@ public class CurrentUserService {
     @Transactional(readOnly = true)
     public UUID currentOrganizationId() {
         return currentOrganization().getId();
+    }
+
+    private AppUserPrincipal currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AppUserPrincipal principal)) {
+            throw new ForbiddenException("Authenticated user is required.");
+        }
+        return principal;
     }
 }

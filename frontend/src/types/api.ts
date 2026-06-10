@@ -2,6 +2,13 @@ export type OrganizationType = "FREELANCER" | "BUSINESS" | "ACCOUNTING_OFFICE";
 export type InvoiceStatus = "UPLOADED" | "VALID" | "INVALID" | "WARNING" | "ARCHIVED";
 export type ValidationStatus = "VALID" | "INVALID" | "WARNING";
 export type ValidationSeverity = "ERROR" | "WARNING" | "INFO";
+export type MembershipRole = "OWNER" | "ACCOUNTANT" | "CLIENT" | "EMPLOYEE";
+export type OrganizationProfile = {
+  id: string;
+  name: string;
+  type: OrganizationType;
+  role: MembershipRole;
+};
 
 export type AuthResponse = {
   token: string;
@@ -11,12 +18,8 @@ export type AuthResponse = {
     firstName: string;
     lastName: string;
   };
-  organization: {
-    id: string;
-    name: string;
-    type: OrganizationType;
-    role: string;
-  };
+  organization: OrganizationProfile | null;
+  organizations: OrganizationProfile[];
 };
 
 export type Company = {

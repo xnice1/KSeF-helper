@@ -6,6 +6,7 @@ import com.ksefhelper.invoices.dto.InvoiceSummaryResponse;
 import com.ksefhelper.invoices.dto.InvoiceValidationResponse;
 import com.ksefhelper.invoices.dto.UploadInvoiceResponse;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/invoices")
@@ -68,7 +70,13 @@ public class InvoiceController {
         InvoiceService.DownloadedInvoiceFile file = invoiceService.downloadOriginal(id);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(file.contentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.originalFilename() + "\"")
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename(file.originalFilename(), StandardCharsets.UTF_8)
+                                .build()
+                                .toString()
+                )
                 .body(file.resource());
     }
 
