@@ -24,7 +24,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ksef_helper
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ksef_helper
       SPRING_DATASOURCE_USERNAME: ksef
       SPRING_DATASOURCE_PASSWORD: ksef
       JWT_SECRET: ZmFrZS1kZWZhdWx0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMzItYnl0ZXM=

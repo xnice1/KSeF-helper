@@ -83,20 +83,9 @@ public class InvoiceService {
         StoredFile storedFile = fileStorageService.storeXml(multipartFile, organization);
         File xmlFile = new File(storedFile.getStoragePath());
 
-        List<ValidationIssue> issues = new ArrayList<>(technicalValidationService.validate(xmlFile));
-        ParsedInvoice parsedInvoice = ParsedInvoice.empty();
-        try {
-            parsedInvoice = invoiceXmlParser.parse(xmlFile);
-            issues.addAll(businessValidationService.validate(parsedInvoice));
-        } catch (IllegalArgumentException ex) {
-            issues.add(new ValidationIssue(
-                    ValidationSeverity.ERROR,
-                    "XML_PARSE_FAILED",
-                    null,
-                    "The XML file could not be read safely.",
-                    "Check that the file is well-formed XML and does not contain unsupported external resources."
-            ));
-        }
+        ValidationRun validationRun = runValidation(xmlFile);
+        List<ValidationIssue> issues = validationRun.issues();
+        ParsedInvoice parsedInvoice = validationRun.parsedInvoice();
 
         InvoiceStatus invoiceStatus = invoiceStatus(issues);
         Invoice invoice = createInvoice(organization, company, storedFile, parsedInvoice, invoiceStatus);
@@ -109,6 +98,34 @@ public class InvoiceService {
                 savedInvoice.getStatus(),
                 savedInvoice.getInvoiceNumber(),
                 savedValidationResult.getMessages().stream().map(invoiceMapper::toValidationMessage).toList()
+        );
+    }
+
+    @Transactional
+    public InvoiceValidationResponse revalidate(UUID id) {
+        Invoice invoice = findScoped(id);
+        ValidationResult result = validationResultRepository.findByInvoiceIdAndInvoiceOrganizationId(
+                        id,
+                        currentUserService.currentOrganizationId()
+                )
+                .orElseThrow(() -> new NotFoundException("Validation result was not found."));
+
+        ValidationRun validationRun = runValidation(new File(invoice.getFile().getStoragePath()));
+        InvoiceStatus status = invoiceStatus(validationRun.issues());
+        applyParsedInvoice(invoice, validationRun.parsedInvoice());
+        invoice.setStatus(status);
+
+        result.setStatus(validationStatus(status));
+        result.clearMessages();
+        addValidationMessages(result, validationRun.issues());
+
+        invoiceRepository.save(invoice);
+        ValidationResult savedResult = validationResultRepository.save(result);
+        return new InvoiceValidationResponse(
+                invoice.getId(),
+                savedResult.getStatus(),
+                savedResult.getUpdatedAt(),
+                savedResult.getMessages().stream().map(invoiceMapper::toValidationMessage).toList()
         );
     }
 
@@ -180,6 +197,12 @@ public class InvoiceService {
         invoice.setOrganization(organization);
         invoice.setCompany(company);
         invoice.setFile(storedFile);
+        applyParsedInvoice(invoice, parsedInvoice);
+        invoice.setStatus(status);
+        return invoice;
+    }
+
+    private void applyParsedInvoice(Invoice invoice, ParsedInvoice parsedInvoice) {
         invoice.setInvoiceNumber(parsedInvoice.invoiceNumber());
         invoice.setIssueDate(parsedInvoice.issueDate());
         invoice.setSaleDate(parsedInvoice.saleDate());
@@ -193,7 +216,7 @@ public class InvoiceService {
         invoice.setGrossAmount(parsedInvoice.grossAmount());
         invoice.setPaymentMethod(parsedInvoice.paymentMethod());
         invoice.setBankAccount(parsedInvoice.bankAccount());
-        invoice.setStatus(status);
+        invoice.clearItems();
         for (ParsedInvoiceItem parsedItem : parsedInvoice.items()) {
             InvoiceItem item = new InvoiceItem();
             item.setName(parsedItem.name());
@@ -205,13 +228,17 @@ public class InvoiceService {
             item.setGrossAmount(parsedItem.grossAmount());
             invoice.addItem(item);
         }
-        return invoice;
     }
 
     private ValidationResult createValidationResult(Invoice invoice, List<ValidationIssue> issues, ValidationStatus status) {
         ValidationResult result = new ValidationResult();
         result.setInvoice(invoice);
         result.setStatus(status);
+        addValidationMessages(result, issues);
+        return result;
+    }
+
+    private void addValidationMessages(ValidationResult result, List<ValidationIssue> issues) {
         for (ValidationIssue issue : issues) {
             ValidationMessage message = new ValidationMessage();
             message.setSeverity(issue.severity());
@@ -221,7 +248,24 @@ public class InvoiceService {
             message.setSuggestion(issue.suggestion());
             result.addMessage(message);
         }
-        return result;
+    }
+
+    private ValidationRun runValidation(File xmlFile) {
+        List<ValidationIssue> issues = new ArrayList<>(technicalValidationService.validate(xmlFile));
+        ParsedInvoice parsedInvoice = ParsedInvoice.empty();
+        try {
+            parsedInvoice = invoiceXmlParser.parse(xmlFile);
+            issues.addAll(businessValidationService.validate(parsedInvoice));
+        } catch (IllegalArgumentException ex) {
+            issues.add(new ValidationIssue(
+                    ValidationSeverity.ERROR,
+                    "XML_PARSE_FAILED",
+                    null,
+                    "The XML file could not be read safely.",
+                    "Check that the file is well-formed XML and does not contain unsupported external resources."
+            ));
+        }
+        return new ValidationRun(parsedInvoice, issues);
     }
 
     private InvoiceStatus invoiceStatus(List<ValidationIssue> issues) {
@@ -242,5 +286,8 @@ public class InvoiceService {
     }
 
     public record DownloadedInvoiceFile(Resource resource, String originalFilename, String contentType) {
+    }
+
+    private record ValidationRun(ParsedInvoice parsedInvoice, List<ValidationIssue> issues) {
     }
 }

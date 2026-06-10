@@ -64,4 +64,8 @@ public class ValidationResult extends AuditableEntity {
         message.setValidationResult(this);
         messages.add(message);
     }
+
+    public void clearMessages() {
+        messages.clear();
+    }
 }

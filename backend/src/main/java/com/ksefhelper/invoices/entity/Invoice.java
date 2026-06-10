@@ -214,4 +214,8 @@ public class Invoice extends AuditableEntity {
         item.setInvoice(this);
         items.add(item);
     }
+
+    public void clearItems() {
+        items.clear();
+    }
 }

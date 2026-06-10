@@ -20,7 +20,10 @@ function Protected() {
 }
 
 function Public({ children }: { children: JSX.Element }) {
-  const { auth } = useAuth();
+  const { auth, loading } = useAuth();
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center bg-paper text-neutral-700">Loading KSeF Helper...</div>;
+  }
   return auth ? <Navigate to="/app" replace /> : children;
 }
 

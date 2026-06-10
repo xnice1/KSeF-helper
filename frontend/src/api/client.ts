@@ -122,6 +122,8 @@ export const api = {
   invoice: (id: string) => request<InvoiceSummary>(`/invoices/${id}`),
   invoicePreview: (id: string) => request<InvoicePreview>(`/invoices/${id}/preview`),
   invoiceValidation: (id: string) => request<InvoiceValidation>(`/invoices/${id}/validation`),
+  revalidateInvoice: (id: string) =>
+    request<InvoiceValidation>(`/invoices/${id}/revalidate`, { method: "POST" }),
   validationReport: (id: string) => request<ValidationReport>(`/reports/invoices/${id}/validation-report`),
   deleteInvoice: (id: string) => request<void>(`/invoices/${id}`, { method: "DELETE" }),
   downloadOriginalFile: async (id: string) => {

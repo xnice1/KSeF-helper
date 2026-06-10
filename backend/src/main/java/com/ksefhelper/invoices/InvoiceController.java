@@ -58,6 +58,11 @@ public class InvoiceController {
         return invoiceService.validation(id);
     }
 
+    @PostMapping("/{id}/revalidate")
+    public InvoiceValidationResponse revalidate(@PathVariable UUID id) {
+        return invoiceService.revalidate(id);
+    }
+
     @GetMapping("/{id}/download-original")
     public ResponseEntity<?> downloadOriginal(@PathVariable UUID id) {
         InvoiceService.DownloadedInvoiceFile file = invoiceService.downloadOriginal(id);

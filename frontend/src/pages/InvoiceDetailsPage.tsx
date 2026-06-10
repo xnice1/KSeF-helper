@@ -1,11 +1,12 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, FileWarning } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, FileWarning, RefreshCw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function InvoiceDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const { data: preview, isLoading } = useQuery({
     queryKey: ["invoice-preview", id],
     queryFn: () => api.invoicePreview(id!),
@@ -22,6 +23,16 @@ export function InvoiceDetailsPage() {
       URL.revokeObjectURL(url);
     }
   });
+  const revalidate = useMutation({
+    mutationFn: () => api.revalidateInvoice(id!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoice-preview", id] }),
+        queryClient.invalidateQueries({ queryKey: ["validation-report", id] }),
+        queryClient.invalidateQueries({ queryKey: ["invoices"] })
+      ]);
+    }
+  });
 
   if (isLoading || !preview) {
     return <p className="text-sm text-neutral-600">Loading invoice preview...</p>;
@@ -35,6 +46,14 @@ export function InvoiceDetailsPage() {
           <p className="mt-1 text-sm text-neutral-600">Uploaded {new Date(preview.uploadedAt).toLocaleString()}</p>
         </div>
         <div className="flex gap-2">
+          <button
+            className="focus-ring inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-neutral-700"
+            disabled={revalidate.isPending}
+            onClick={() => revalidate.mutate()}
+          >
+            <RefreshCw className={revalidate.isPending ? "animate-spin" : ""} size={16} />
+            {revalidate.isPending ? "Revalidating..." : "Revalidate"}
+          </button>
           <Link className="focus-ring rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-neutral-700" to={`/app/validation/${preview.id}`}>
             Validation
           </Link>
@@ -44,6 +63,7 @@ export function InvoiceDetailsPage() {
           </button>
         </div>
       </div>
+      {revalidate.error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{revalidate.error.message}</p> : null}
 
       <section className="rounded-lg border border-line bg-white p-6 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-5">

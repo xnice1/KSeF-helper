@@ -20,7 +20,7 @@ Backend:
 - Maven
 - JWT authentication
 - BCrypt password hashing
-- XML validation with `SchemaFactory`
+- Official FA(3) XSD validation with an isolated Python `lxml` worker
 - XML field extraction with safe DOM + XPath parsing
 
 Frontend:
@@ -49,7 +49,7 @@ Infrastructure:
 - XML invoice upload
 - Original XML file storage
 - SHA-256 checksum calculation
-- Placeholder XSD validation from `backend/src/main/resources/xsd/ksef-placeholder.xsd`
+- Official FA(3) XSD validation
 - Official FA(3) schema files bundled under `backend/src/main/resources/xsd/`
 - FA(3) parser support for common official fields such as `Podmiot1`, `Podmiot2`, `P_1`, `P_2`, `P_13_*`, `P_14_*`, `P_15`, and `FaWiersz`
 - Defensive XML parsing with XXE protections
@@ -136,7 +136,9 @@ FILE_STORAGE_PATH=uploads
 MAX_FILE_SIZE=10MB
 MAX_REQUEST_SIZE=10MB
 MAX_UPLOAD_BYTES=10485760
-XML_XSD_PATH=classpath:xsd/ksef-placeholder.xsd
+XML_XSD_PATH=classpath:xsd/schemat_fa_vat-3-_v1-0.xsd
+XML_VALIDATOR_COMMAND=python3
+XML_VALIDATION_TIMEOUT=10s
 ```
 
 Frontend:
@@ -155,6 +157,13 @@ For IntelliJ, set these run configuration environment variables:
 SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:55432/ksef_helper
 SPRING_DATASOURCE_USERNAME=ksef
 SPRING_DATASOURCE_PASSWORD=ksef
+XML_VALIDATOR_COMMAND=python
+```
+
+The selected Python installation must have `lxml` installed:
+
+```text
+python -m pip install lxml
 ```
 
 If you previously created the Docker volume with another password, recreate only the app database volume:
@@ -201,6 +210,7 @@ Invoices:
 - `GET /api/invoices/{id}`
 - `GET /api/invoices/{id}/preview`
 - `GET /api/invoices/{id}/validation`
+- `POST /api/invoices/{id}/revalidate`
 - `GET /api/invoices/{id}/download-original`
 - `DELETE /api/invoices/{id}`
 
@@ -234,8 +244,6 @@ Sample files are under:
 backend/src/test/resources/sample-invoices/
 ```
 
-The included XSD is a placeholder for MVP development. Replace it with the official FA(3) schema when implementing production-grade KSeF validation.
-
 Official FA(3) schema files are also bundled under:
 
 ```text
@@ -251,13 +259,7 @@ Official FA(3) sample XML files are under:
 backend/src/test/resources/sample-invoices/fa3-official/
 ```
 
-The runtime default still uses the placeholder schema because Java's built-in XSD validator is too slow for full FA(3) validation in local testing. To experiment with official schema validation, set:
-
-```text
-XML_XSD_PATH=classpath:xsd/schemat_fa_vat-3-_v1-0.xsd
-```
-
-Before production monetization, replace or isolate this with a performant FA(3) validation strategy, for example a validation worker or a dedicated XML validation engine.
+The runtime validates uploads against the official schema through a timeout-bound `lxml` worker. The Java XML parser still performs the initial well-formedness and XXE safety checks before the worker starts.
 
 ## Roadmap
 

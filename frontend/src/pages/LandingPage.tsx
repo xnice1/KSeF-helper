@@ -32,7 +32,7 @@ export function LandingPage() {
         </div>
       </header>
       <main>
-        <section className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_420px] lg:items-center">
+        <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
           <div>
             <p className="mb-3 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800">
               MVP for FA(3)-style XML workflows
@@ -52,30 +52,6 @@ export function LandingPage() {
             <p className="mt-5 max-w-2xl text-sm text-neutral-500">
               KSeF Helper is not an official government tool and does not certify legal or accounting compliance.
             </p>
-          </div>
-          <div className="rounded-lg border border-line bg-white p-5 shadow-soft">
-            <div className="rounded-md bg-paper p-4">
-              <p className="text-sm font-semibold text-neutral-500">Latest upload</p>
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between rounded-md bg-white p-3">
-                  <span className="font-semibold text-ink">FV/2026/001</span>
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">VALID</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-md bg-white p-3">
-                    <p className="text-neutral-500">Seller</p>
-                    <p className="font-semibold">Example Seller</p>
-                  </div>
-                  <div className="rounded-md bg-white p-3">
-                    <p className="text-neutral-500">Gross</p>
-                    <p className="font-semibold">123.00 PLN</p>
-                  </div>
-                </div>
-                <div className="rounded-md bg-white p-3 text-sm text-neutral-700">
-                  No blocking errors. Buyer and seller NIP detected.
-                </div>
-              </div>
-            </div>
           </div>
         </section>
         <section className="border-t border-line bg-white">

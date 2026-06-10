@@ -30,4 +30,7 @@ app:
     local-path: ${FILE_STORAGE_PATH:uploads}
     max-upload-bytes: ${MAX_UPLOAD_BYTES:10485760}
   xml:
-    xsd-path: ${XML_XSD_PATH:classpath:xsd/ksef-placeholder.xsd}
+    xsd-path: ${XML_XSD_PATH:classpath:xsd/schemat_fa_vat-3-_v1-0.xsd}
+    validator-script: classpath:xml-validator/validate_fa3.py
+    validator-command: ${XML_VALIDATOR_COMMAND:python3}
+    validation-timeout: ${XML_VALIDATION_TIMEOUT:10s}

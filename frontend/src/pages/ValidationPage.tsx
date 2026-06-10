@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
@@ -46,9 +47,20 @@ function ValidationIndex() {
 }
 
 function ValidationReport({ invoiceId }: { invoiceId: string }) {
+  const queryClient = useQueryClient();
   const { data: report, isLoading } = useQuery({
     queryKey: ["validation-report", invoiceId],
     queryFn: () => api.validationReport(invoiceId)
+  });
+  const revalidate = useMutation({
+    mutationFn: () => api.revalidateInvoice(invoiceId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["validation-report", invoiceId] }),
+        queryClient.invalidateQueries({ queryKey: ["invoice-preview", invoiceId] }),
+        queryClient.invalidateQueries({ queryKey: ["invoices"] })
+      ]);
+    }
   });
 
   if (isLoading || !report) {
@@ -62,8 +74,19 @@ function ValidationReport({ invoiceId }: { invoiceId: string }) {
           <h1 className="text-2xl font-bold text-ink">Validation report</h1>
           <p className="mt-1 text-sm text-neutral-600">{report.invoice.invoiceNumber ?? "Invoice"} · Generated {new Date(report.generatedAt).toLocaleString()}</p>
         </div>
-        <StatusBadge status={report.validationStatus} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={report.validationStatus} />
+          <button
+            className="focus-ring inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-neutral-700"
+            disabled={revalidate.isPending}
+            onClick={() => revalidate.mutate()}
+          >
+            <RefreshCw className={revalidate.isPending ? "animate-spin" : ""} size={16} />
+            {revalidate.isPending ? "Revalidating..." : "Revalidate"}
+          </button>
+        </div>
       </div>
+      {revalidate.error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{revalidate.error.message}</p> : null}
       <section className="grid gap-4 sm:grid-cols-3">
         <Metric label="Errors" value={report.errors.length} tone="text-rose-700" />
         <Metric label="Warnings" value={report.warnings.length} tone="text-amber-700" />
