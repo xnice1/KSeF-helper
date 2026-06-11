@@ -7,9 +7,9 @@ type AuthContextValue = {
   auth: AuthResponse | null;
   loading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<AuthResponse>;
   switchOrganization: (organizationId: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -17,15 +17,17 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [auth, setAuth] = useState<AuthResponse | null>(null);
-  const [loading, setLoading] = useState(Boolean(tokenStore.get()));
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!tokenStore.get()) {
-      return;
-    }
     api
-      .me()
-      .then(setAuth)
+      .refresh()
+      .then((response) => {
+        if (response.token) {
+          tokenStore.set(response.token);
+          setAuth(response);
+        }
+      })
       .catch(() => {
         tokenStore.clear();
         queryClient.clear();
@@ -40,22 +42,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login: async (payload) => {
         queryClient.clear();
         const response = await api.login(payload);
+        if (!response.token) {
+          throw new Error("Login did not return an access token.");
+        }
         tokenStore.set(response.token);
         setAuth(response);
       },
       register: async (payload) => {
         queryClient.clear();
         const response = await api.register(payload);
-        tokenStore.set(response.token);
-        setAuth(response);
+        if (response.token) {
+          tokenStore.set(response.token);
+          setAuth(response);
+        }
+        return response;
       },
       switchOrganization: async (organizationId) => {
         const response = await api.switchOrganization(organizationId);
+        if (!response.token) {
+          throw new Error("Organization switch did not return an access token.");
+        }
         tokenStore.set(response.token);
         queryClient.clear();
         setAuth(response);
       },
-      logout: () => {
+      logout: async () => {
+        await api.logout().catch(() => undefined);
         tokenStore.clear();
         setAuth(null);
         queryClient.clear();

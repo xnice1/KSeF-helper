@@ -1,6 +1,8 @@
 package com.ksefhelper.auth;
 
 import com.ksefhelper.auth.dto.RegisterRequest;
+import com.ksefhelper.auth.entity.AuthSession;
+import com.ksefhelper.auth.mail.AccountMailService;
 import com.ksefhelper.organizations.entity.Membership;
 import com.ksefhelper.organizations.entity.MembershipRole;
 import com.ksefhelper.organizations.entity.Organization;
@@ -20,6 +22,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.UUID;
+import java.time.Duration;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,10 +39,13 @@ class AuthServiceTest {
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final JwtService jwtService = new JwtService(
             "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
-            86400000
+            Duration.ofMinutes(10)
     );
     private final AuthenticationManager authenticationManager = mock(AuthenticationManager.class);
     private final CurrentUserService currentUserService = null;
+    private final RefreshSessionService refreshSessionService = mock(RefreshSessionService.class);
+    private final AccountTokenService accountTokenService = mock(AccountTokenService.class);
+    private final AccountMailService accountMailService = mock(AccountMailService.class);
 
     private final AuthService authService = new AuthService(
             userRepository,
@@ -47,7 +54,13 @@ class AuthServiceTest {
             passwordEncoder,
             jwtService,
             authenticationManager,
-            currentUserService
+            currentUserService,
+            refreshSessionService,
+            accountTokenService,
+            accountMailService,
+            false,
+            Duration.ofHours(24),
+            Duration.ofMinutes(30)
     );
 
     @Test
@@ -61,6 +74,13 @@ class AuthServiceTest {
         });
         when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(membershipRepository.save(any(Membership.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshSessionService.create(any(User.class), any(Organization.class))).thenReturn(
+                new RefreshSessionService.IssuedRefreshToken(
+                        "refresh-token",
+                        Instant.now().plus(Duration.ofDays(30)),
+                        mock(AuthSession.class)
+                )
+        );
 
         authService.register(new RegisterRequest(
                 "OWNER@EXAMPLE.COM",

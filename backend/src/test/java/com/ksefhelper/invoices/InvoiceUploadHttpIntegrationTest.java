@@ -1,6 +1,8 @@
 package com.ksefhelper.invoices;
 
 import com.ksefhelper.auth.dto.AuthResponse;
+import com.ksefhelper.auth.dto.ResetPasswordRequest;
+import com.ksefhelper.auth.dto.TokenRequest;
 import com.ksefhelper.auth.dto.LoginRequest;
 import com.ksefhelper.auth.dto.RegisterRequest;
 import com.ksefhelper.companies.dto.CompanyRequest;
@@ -10,6 +12,10 @@ import com.ksefhelper.invoices.dto.InvoicePreviewResponse;
 import com.ksefhelper.invoices.dto.InvoiceSummaryResponse;
 import com.ksefhelper.invoices.dto.UploadInvoiceResponse;
 import com.ksefhelper.invoices.entity.InvoiceStatus;
+import com.ksefhelper.files.FileStorageService;
+import com.ksefhelper.files.entity.StoredFile;
+import com.ksefhelper.files.repository.StoredFileRepository;
+import com.ksefhelper.files.storage.ObjectStorage;
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
 import com.ksefhelper.organizations.dto.OrganizationRequest;
 import com.ksefhelper.organizations.dto.OrganizationResponse;
@@ -20,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -38,12 +45,19 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.sql.Timestamp;
+import java.util.HexFormat;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SuppressWarnings("SqlResolve")
 class InvoiceUploadHttpIntegrationTest {
     private static final String EXEMPT_INVOICE_SAMPLE = "FA_3_Przykład_9.xml";
     private static final Path STORAGE_ROOT = createStorageRoot();
@@ -60,6 +74,18 @@ class InvoiceUploadHttpIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private StoredFileRepository storedFileRepository;
+
+    @Autowired
+    private FileStorageService fileStorageService;
+
+    @Autowired
+    private ObjectStorage objectStorage;
+
+    @LocalServerPort
+    private int serverPort;
 
     @DynamicPropertySource
     static void applicationProperties(DynamicPropertyRegistry registry) {
@@ -111,7 +137,7 @@ class InvoiceUploadHttpIntegrationTest {
                 upload.invoiceId()
         );
         assertThat(storagePath).isNotBlank();
-        assertThat(Files.isRegularFile(Path.of(storagePath))).isTrue();
+        assertThat(Files.isRegularFile(STORAGE_ROOT.resolve(storagePath))).isTrue();
         // language=PostgreSQL
         String textualVatQuery = "SELECT vat_rate FROM invoice_items WHERE invoice_id = ? AND vat_rate = 'zw'";
         assertThat(jdbcTemplate.queryForObject(
@@ -264,11 +290,152 @@ class InvoiceUploadHttpIntegrationTest {
         assertStatus(accountantToken, HttpMethod.DELETE, "/api/invoices/" + ownerUpload.invoiceId(), null, 204);
     }
 
+    @Test
+    void rotatesRefreshTokensAndRevokesTheFamilyWhenAnOldTokenIsReused() {
+        ResponseEntity<AuthResponse> registration = registerResponse("refresh-rotation");
+        String firstCookie = refreshCookie(registration);
+
+        ResponseEntity<AuthResponse> refreshed = refresh(firstCookie);
+        assertThat(refreshed.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(refreshed.getBody()).isNotNull();
+        assertThat(refreshed.getBody().token()).isNotBlank();
+        String secondCookie = refreshCookie(refreshed);
+        assertThat(secondCookie).isNotEqualTo(firstCookie);
+
+        assertThat(refresh(firstCookie).getStatusCode().value()).isEqualTo(400);
+        assertThat(refresh(secondCookie).getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    void logoutRevokesTheRefreshSession() {
+        ResponseEntity<AuthResponse> registration = registerResponse("logout");
+        String cookie = refreshCookie(registration);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, cookie);
+        ResponseEntity<Void> logout = restTemplate.exchange(
+                "/api/auth/logout",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                Void.class
+        );
+
+        assertThat(logout.getStatusCode().value()).isEqualTo(204);
+        assertThat(refresh(cookie).getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    void passwordResetRevokesSessionsAndChangesCredentials() {
+        ResponseEntity<AuthResponse> registration = registerResponse("password-reset");
+        AuthResponse auth = registration.getBody();
+        assertThat(auth).isNotNull();
+        String cookie = refreshCookie(registration);
+        String resetToken = "known-password-reset-token";
+        insertAccountToken(auth.user().id(), "PASSWORD_RESET", resetToken);
+
+        ResponseEntity<String> reset = restTemplate.postForEntity(
+                "/api/auth/reset-password",
+                new ResetPasswordRequest(resetToken, "new-strong-password"),
+                String.class
+        );
+
+        assertThat(reset.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(refresh(cookie).getStatusCode().value()).isEqualTo(400);
+        assertThat(login(auth.user().email(), "strong-password").getStatusCode().value()).isEqualTo(401);
+        assertThat(login(auth.user().email(), "new-strong-password").getStatusCode().is2xxSuccessful()).isTrue();
+    }
+
+    @Test
+    void emailVerificationTokenActivatesAnUnverifiedAccount() {
+        ResponseEntity<AuthResponse> registration = registerResponse("verification");
+        AuthResponse auth = registration.getBody();
+        assertThat(auth).isNotNull();
+        jdbcTemplate.update("UPDATE app_users SET email_verified = FALSE WHERE id = ?", auth.user().id());
+        String verificationToken = "known-verification-token";
+        insertAccountToken(auth.user().id(), "EMAIL_VERIFICATION", verificationToken);
+
+        ResponseEntity<AuthResponse> verified = restTemplate.postForEntity(
+                "/api/auth/verify-email",
+                new TokenRequest(verificationToken),
+                AuthResponse.class
+        );
+
+        assertThat(verified.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(verified.getBody()).isNotNull();
+        assertThat(verified.getBody().user().emailVerified()).isTrue();
+        assertThat(refreshCookie(verified)).isNotBlank();
+    }
+
+    @Test
+    void platformAdminCanDisableAnAccountAndRevokeItsSessions() {
+        RegisteredUser admin = registerUser("platform-admin");
+        ResponseEntity<AuthResponse> targetRegistration = registerResponse("disabled-user");
+        AuthResponse target = targetRegistration.getBody();
+        assertThat(target).isNotNull();
+        String targetCookie = refreshCookie(targetRegistration);
+        jdbcTemplate.update("UPDATE app_users SET platform_admin = TRUE WHERE id = ?", userId(admin.email()));
+
+        assertStatus(
+                admin.token(),
+                HttpMethod.POST,
+                "/api/admin/users/" + target.user().id() + "/disable",
+                null,
+                204
+        );
+
+        assertThat(login(target.user().email(), "strong-password").getStatusCode().value()).isEqualTo(401);
+        assertThat(refresh(targetCookie).getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    void backsUpRestoresAndDeletesStoredObjectsThroughTheStorageBoundary() {
+        RegisteredUser user = registerUser("storage-lifecycle");
+        UploadInvoiceResponse upload = upload(user.token(), officialSample()).getBody();
+        assertThat(upload).isNotNull();
+        StoredFile storedFile = storedFile(upload.invoiceId());
+        byte[] backup = fileStorageService.exportForBackup(storedFile);
+
+        objectStorage.delete(storedFile.getStoragePath());
+        assertStatus(
+                user.token(),
+                HttpMethod.GET,
+                "/api/invoices/" + upload.invoiceId() + "/download-original",
+                null,
+                404
+        );
+
+        fileStorageService.restoreFromBackup(storedFile, backup);
+        assertStatus(
+                user.token(),
+                HttpMethod.GET,
+                "/api/invoices/" + upload.invoiceId() + "/download-original",
+                null,
+                200
+        );
+
+        assertStatus(user.token(), HttpMethod.DELETE, "/api/invoices/" + upload.invoiceId(), null, 204);
+        assertThat(objectStorage.exists(storedFile.getStoragePath())).isFalse();
+        // language=PostgreSQL
+        Integer completedTasks = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM storage_deletion_tasks WHERE storage_key = ? AND completed_at IS NOT NULL",
+                Integer.class,
+                storedFile.getStoragePath()
+        );
+        assertThat(completedTasks).isEqualTo(1);
+    }
+
     private String register() {
         return registerUser("integration").token();
     }
 
     private RegisteredUser registerUser(String prefix) {
+        ResponseEntity<AuthResponse> response = registerResponse(prefix);
+        AuthResponse body = java.util.Objects.requireNonNull(response.getBody());
+        assertThat(body.organization()).isNotNull();
+        return new RegisteredUser(body.user().email(), body.token(), body.organization().id());
+    }
+
+    private ResponseEntity<AuthResponse> registerResponse(String prefix) {
         String email = prefix + "-" + UUID.randomUUID() + "@example.com";
         RegisterRequest request = new RegisterRequest(
                 email,
@@ -282,8 +449,7 @@ class InvoiceUploadHttpIntegrationTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().organization()).isNotNull();
-        return new RegisteredUser(email, response.getBody().token(), response.getBody().organization().id());
+        return response;
     }
 
     private AuthResponse switchOrganization(String token, UUID organizationId) {
@@ -369,6 +535,69 @@ class InvoiceUploadHttpIntegrationTest {
         // language=PostgreSQL
         Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM stored_files", Long.class);
         return count == null ? 0 : count;
+    }
+
+    private ResponseEntity<AuthResponse> refresh(String cookie) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, cookie);
+        return new TestRestTemplate().exchange(
+                "http://localhost:" + serverPort + "/api/auth/refresh",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                AuthResponse.class
+        );
+    }
+
+    private ResponseEntity<AuthResponse> login(String email, String password) {
+        return restTemplate.postForEntity(
+                "/api/auth/login",
+                new LoginRequest(email, password),
+                AuthResponse.class
+        );
+    }
+
+    private String refreshCookie(ResponseEntity<?> response) {
+        String setCookie = response.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
+        assertThat(setCookie).isNotBlank();
+        return setCookie.substring(0, setCookie.indexOf(';'));
+    }
+
+    private void insertAccountToken(UUID userId, String type, String rawToken) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO account_tokens (
+                    user_id, type, token_hash, expires_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                userId,
+                type,
+                sha256(rawToken),
+                Timestamp.from(Instant.now().plusSeconds(3600)),
+                Timestamp.from(Instant.now()),
+                Timestamp.from(Instant.now())
+        );
+    }
+
+    private UUID userId(String email) {
+        return jdbcTemplate.queryForObject("SELECT id FROM app_users WHERE email = ?", UUID.class, email);
+    }
+
+    private StoredFile storedFile(UUID invoiceId) {
+        UUID fileId = jdbcTemplate.queryForObject(
+                "SELECT file_id FROM invoices WHERE id = ?",
+                UUID.class,
+                invoiceId
+        );
+        return storedFileRepository.findById(java.util.Objects.requireNonNull(fileId)).orElseThrow();
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     private Path officialSample() {

@@ -46,6 +46,15 @@ export function LoginPage() {
           {formState.isSubmitting ? "Signing in..." : "Sign in"}
         </button>
         <p className="text-sm text-neutral-600">
+          <Link className="font-semibold text-emerald-700" to="/forgot-password">
+            Forgot password?
+          </Link>
+          {" · "}
+          <Link className="font-semibold text-emerald-700" to="/request-verification">
+            Resend verification
+          </Link>
+        </p>
+        <p className="text-sm text-neutral-600">
           New here?{" "}
           <Link className="font-semibold text-emerald-700" to="/register">
             Create an account

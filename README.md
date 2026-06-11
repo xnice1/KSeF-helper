@@ -19,6 +19,9 @@ Backend:
 - Flyway
 - Maven
 - JWT authentication
+- Rotating HttpOnly refresh sessions with replay detection
+- Email verification and password reset token flows
+- Account disable and refresh-session revocation
 - BCrypt password hashing
 - Official FA(3) XSD validation with an isolated Python `lxml` worker
 - XML field extraction with safe DOM + XPath parsing
@@ -39,6 +42,7 @@ Infrastructure:
 - Docker Compose
 - PostgreSQL container
 - Local disk XML storage for development
+- S3-compatible encrypted object storage for production
 
 ## MVP Features
 
@@ -133,7 +137,19 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:55432/ksef_helper
 SPRING_DATASOURCE_USERNAME=ksef
 SPRING_DATASOURCE_PASSWORD=ksef
 JWT_SECRET=base64-encoded-secret-at-least-256-bit
-JWT_EXPIRATION_MS=86400000
+JWT_ACCESS_EXPIRATION=10m
+REFRESH_TOKEN_EXPIRATION=30d
+REFRESH_COOKIE_NAME=ksef-helper-refresh
+REFRESH_COOKIE_SECURE=false
+EMAIL_VERIFICATION_REQUIRED=false
+EMAIL_VERIFICATION_EXPIRATION=24h
+PASSWORD_RESET_EXPIRATION=30m
+FRONTEND_URL=http://localhost:5173
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+FORWARD_HEADERS_STRATEGY=none
+MAIL_DELIVERY=log
+MAIL_FROM=no-reply@localhost
+FILE_STORAGE_TYPE=local
 FILE_STORAGE_PATH=uploads
 MAX_FILE_SIZE=10MB
 MAX_REQUEST_SIZE=10MB
@@ -149,6 +165,28 @@ UPLOAD_RATE_LIMIT_MAX_REQUESTS=20
 UPLOAD_RATE_LIMIT_WINDOW=1m
 ```
 
+Production additionally requires:
+
+```text
+SPRING_PROFILES_ACTIVE=prod
+JWT_SECRET=unique-base64-secret-at-least-256-bit
+CORS_ALLOWED_ORIGINS=https://app.example.com
+FRONTEND_URL=https://app.example.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+MAIL_FROM=no-reply@example.com
+S3_BUCKET=ksef-helper-production
+S3_REGION=eu-central-1
+# Optional with S3_SERVER_SIDE_ENCRYPTION=aws:kms
+S3_KMS_KEY_ID=...
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+```
+
+For MinIO, Cloudflare R2, or another S3-compatible provider, also set `S3_ENDPOINT` and, when required, `S3_PATH_STYLE_ACCESS=true`.
+
 Frontend:
 
 ```text
@@ -158,6 +196,10 @@ VITE_API_URL=http://localhost:8080/api
 Login attempts are limited by both client address and normalized email address. Invoice uploads are limited per user and organization. Rejected requests return HTTP `429` with a `Retry-After` header.
 
 The built-in limiter stores counters in the backend process and is suitable for local development and a single backend instance. A multi-instance production deployment must use a shared limiter such as Redis or enforce equivalent limits at a trusted API gateway. Configure Spring's forwarded-header handling when a reverse proxy is responsible for supplying the real client address.
+
+Access tokens are kept in browser memory and expire after ten minutes by default. Refresh tokens are opaque, hashed in PostgreSQL, sent only as `HttpOnly; SameSite=Strict` cookies, rotated after every refresh, and revoked as a family when reuse is detected. Logout revokes the refresh session. Password resets and account disabling revoke all refresh sessions and invalidate existing access tokens through account-state checks.
+
+With `MAIL_DELIVERY=log`, verification and reset links are written to backend logs for local development only. Production startup requires the `prod` profile, SMTP delivery, secure refresh cookies, an explicit production CORS origin, a unique JWT secret, and S3 storage.
 
 ## Troubleshooting
 
@@ -197,6 +239,12 @@ Auth:
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/request-verification`
+- `POST /api/auth/verify-email`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
 - `GET /api/auth/me`
 
 Organizations:
@@ -291,6 +339,10 @@ backend/src/test/resources/sample-invoices/fa3-official/
 
 The runtime validates uploads against the official schema through a timeout-bound `lxml` worker. The Java XML parser still performs the initial well-formedness and XXE safety checks before the worker starts.
 
+Production objects are stored under organization-scoped generated keys. Upload rollback removes the new object; failed rollback cleanup and post-commit invoice deletion use a persisted retry queue. Downloads and restores verify the stored SHA-256 checksum.
+
+See [`docs/production-operations.md`](docs/production-operations.md) for backup, restore, S3 versioning, and platform-admin setup.
+
 ## Tests
 
 Backend tests require a working Python installation with `lxml`. The upload integration tests also require Docker because they start a disposable PostgreSQL container.
@@ -312,7 +364,6 @@ The GitHub Actions workflow under `.github/workflows/ci.yml` runs the mandatory 
 - Accountant-client collaboration
 - Email notifications
 - Stripe or Polish payment integration
-- S3-compatible file storage
 - Audit logs
 - Subscription plans and usage limits
 

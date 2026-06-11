@@ -5,12 +5,14 @@ import type {
   InvoiceSummary,
   InvoiceValidation,
   OrganizationType,
+  MessageResponse,
   UploadInvoiceResponse,
   ValidationReport
 } from "../types/api";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080/api";
-const TOKEN_KEY = "ksef-helper-token";
+let accessToken: string | null = null;
+let refreshPromise: Promise<AuthResponse> | null = null;
 
 export type LoginPayload = {
   email: string;
@@ -59,12 +61,16 @@ export class ApiError extends Error {
 }
 
 export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
-  clear: () => localStorage.removeItem(TOKEN_KEY)
+  get: () => accessToken,
+  set: (token: string | null) => {
+    accessToken = token;
+  },
+  clear: () => {
+    accessToken = null;
+  }
 };
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -74,7 +80,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
+  if (response.status === 401 && retry && !path.startsWith("/auth/")) {
+    await refreshAccess();
+    return request<T>(path, init, false);
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new ApiError(response.status, body?.message ?? "Request failed.");
@@ -83,6 +93,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     return undefined as T;
   }
   return response.json() as Promise<T>;
+}
+
+async function refreshAccess(): Promise<AuthResponse> {
+  if (!refreshPromise) {
+    refreshPromise = request<AuthResponse>("/auth/refresh", { method: "POST" }, false)
+      .then((response) => {
+        tokenStore.set(response.token);
+        return response;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
 }
 
 function query(params: Record<string, string | undefined>) {
@@ -101,9 +125,31 @@ export const api = {
     request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   register: (payload: RegisterPayload) =>
     request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  refresh: refreshAccess,
+  logout: () => request<void>("/auth/logout", { method: "POST" }, false),
   me: () => request<AuthResponse>("/auth/me"),
   switchOrganization: (organizationId: string) =>
     request<AuthResponse>(`/auth/switch-organization/${organizationId}`, { method: "POST" }),
+  requestVerification: (email: string) =>
+    request<MessageResponse>("/auth/request-verification", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    }),
+  verifyEmail: (token: string) =>
+    request<AuthResponse>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token })
+    }),
+  forgotPassword: (email: string) =>
+    request<MessageResponse>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    }),
+  resetPassword: (token: string, password: string) =>
+    request<MessageResponse>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password })
+    }),
 
   companies: () => request<Company[]>("/companies"),
   createCompany: (payload: CompanyPayload) =>
@@ -131,7 +177,8 @@ export const api = {
   downloadOriginalFile: async (id: string) => {
     const token = tokenStore.get();
     const response = await fetch(`${API_URL}/invoices/${id}/download-original`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: "include"
     });
     if (!response.ok) {
       throw new ApiError(response.status, "Original XML could not be downloaded.");

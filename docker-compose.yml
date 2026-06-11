@@ -27,7 +27,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ksef_helper
       SPRING_DATASOURCE_USERNAME: ksef
       SPRING_DATASOURCE_PASSWORD: ksef
-      JWT_SECRET: ZmFrZS1kZWZhdWx0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMzItYnl0ZXM=
+      JWT_SECRET: ${JWT_SECRET:-ZmFrZS1kZWZhdWx0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMzItYnl0ZXM=}
+      JWT_ACCESS_EXPIRATION: 10m
+      REFRESH_TOKEN_EXPIRATION: 30d
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
       FILE_STORAGE_PATH: /app/uploads
     ports:
       - "8080:8080"

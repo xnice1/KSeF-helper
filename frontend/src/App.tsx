@@ -11,6 +11,10 @@ import { InvoiceDetailsPage } from "./pages/InvoiceDetailsPage";
 import { InvoiceUploadPage } from "./pages/InvoiceUploadPage";
 import { ValidationPage } from "./pages/ValidationPage";
 import { OrganizationSelectionPage } from "./pages/OrganizationSelectionPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
+import { RequestVerificationPage } from "./pages/RequestVerificationPage";
 
 function Protected() {
   const { auth, loading } = useAuth();
@@ -37,6 +41,10 @@ export function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Public><LoginPage /></Public>} />
       <Route path="/register" element={<Public><RegisterPage /></Public>} />
+      <Route path="/forgot-password" element={<Public><ForgotPasswordPage /></Public>} />
+      <Route path="/request-verification" element={<Public><RequestVerificationPage /></Public>} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/app" element={<Protected />}>
         <Route index element={<DashboardPage />} />
         <Route path="companies" element={<CompaniesPage />} />

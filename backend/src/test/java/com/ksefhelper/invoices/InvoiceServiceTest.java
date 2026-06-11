@@ -1,5 +1,6 @@
 package com.ksefhelper.invoices;
 
+import com.ksefhelper.files.FileStorageService;
 import com.ksefhelper.files.entity.StoredFile;
 import com.ksefhelper.invoices.dto.InvoiceValidationResponse;
 import com.ksefhelper.invoices.entity.Invoice;
@@ -23,7 +24,10 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -96,12 +100,17 @@ class InvoiceServiceTest {
                 .thenReturn(Optional.of(validationResult));
         when(invoiceRepository.save(invoice)).thenReturn(invoice);
         when(validationResultRepository.save(validationResult)).thenReturn(validationResult);
+        FileStorageService fileStorageService = mock(FileStorageService.class);
+        when(fileStorageService.withLocalFile(eq(storedFile), any())).thenAnswer(invocation -> {
+            Function<File, ?> operation = invocation.getArgument(1);
+            return operation.apply(xmlFile);
+        });
 
         InvoiceService service = new InvoiceService(
                 invoiceRepository,
                 validationResultRepository,
                 null,
-                null,
+                fileStorageService,
                 new FixedCurrentUserService(organizationId),
                 null,
                 new XmlTechnicalValidationService(fileToValidate -> validSchemaResult()),

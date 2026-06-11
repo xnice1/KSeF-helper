@@ -22,6 +22,7 @@ export function RegisterPage() {
   const { register: registerAccount } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [verificationPending, setVerificationPending] = useState(false);
   const { register, handleSubmit, formState } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -37,8 +38,12 @@ export function RegisterPage() {
   async function onSubmit(values: FormValues) {
     setError(null);
     try {
-      await registerAccount({ ...values, organizationType: values.organizationType as OrganizationType });
-      navigate("/app");
+      const response = await registerAccount({ ...values, organizationType: values.organizationType as OrganizationType });
+      if (response.token) {
+        navigate("/app");
+      } else {
+        setVerificationPending(true);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed.");
     }
@@ -51,7 +56,11 @@ export function RegisterPage() {
           KSeF Helper
         </Link>
         <h1 className="mt-6 text-2xl font-bold text-ink">Create workspace</h1>
-        <form className="mt-6 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
+        {verificationPending ? (
+          <div className="mt-6 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+            Check your email and open the verification link before signing in.
+          </div>
+        ) : <form className="mt-6 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
           <Field label="First name" error={formState.errors.firstName?.message}>
             <input className="focus-ring w-full rounded-md border border-line px-3 py-2" {...register("firstName")} />
           </Field>
@@ -78,7 +87,7 @@ export function RegisterPage() {
           <button className="focus-ring rounded-md bg-emerald-700 px-4 py-2 font-semibold text-white sm:col-span-2" disabled={formState.isSubmitting}>
             {formState.isSubmitting ? "Creating..." : "Create account"}
           </button>
-        </form>
+        </form>}
         <p className="mt-4 text-sm text-neutral-600">
           Already have an account?{" "}
           <Link className="font-semibold text-emerald-700" to="/login">

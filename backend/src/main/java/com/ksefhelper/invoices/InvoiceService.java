@@ -36,7 +36,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -91,9 +90,8 @@ public class InvoiceService {
         rateLimitService.checkUpload(currentUserService.currentUser().getId(), organization.getId());
         Company company = companyId == null ? null : companyService.findScoped(companyId);
         StoredFile storedFile = fileStorageService.storeXml(multipartFile, organization);
-        File xmlFile = new File(storedFile.getStoragePath());
 
-        ValidationRun validationRun = runValidation(xmlFile);
+        ValidationRun validationRun = fileStorageService.withLocalFile(storedFile, this::runValidation);
         List<ValidationIssue> issues = validationRun.issues();
         ParsedInvoice parsedInvoice = validationRun.parsedInvoice();
 
@@ -121,7 +119,7 @@ public class InvoiceService {
                 )
                 .orElseThrow(() -> new NotFoundException("Validation result was not found."));
 
-        ValidationRun validationRun = runValidation(new File(invoice.getFile().getStoragePath()));
+        ValidationRun validationRun = fileStorageService.withLocalFile(invoice.getFile(), this::runValidation);
         InvoiceStatus status = invoiceStatus(validationRun.issues());
         applyParsedInvoice(invoice, validationRun.parsedInvoice());
         invoice.setStatus(status);
@@ -193,9 +191,9 @@ public class InvoiceService {
         authorizationService.require(OrganizationPermission.DELETE_INVOICES);
         Invoice invoice = findScoped(id);
         StoredFile file = invoice.getFile();
+        fileStorageService.scheduleDeletion(file);
         invoiceRepository.delete(invoice);
         storedFileRepository.delete(file);
-        fileStorageService.deletePhysicalFile(file);
     }
 
     public Invoice findScoped(UUID id) {
@@ -268,7 +266,7 @@ public class InvoiceService {
         }
     }
 
-    private ValidationRun runValidation(File xmlFile) {
+    private ValidationRun runValidation(java.io.File xmlFile) {
         List<ValidationIssue> issues = new ArrayList<>(technicalValidationService.validate(xmlFile));
         ParsedInvoice parsedInvoice = ParsedInvoice.empty();
         try {

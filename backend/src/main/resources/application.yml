@@ -1,5 +1,6 @@
 server:
   port: ${SERVER_PORT:8080}
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
 
 spring:
   application:
@@ -23,12 +24,35 @@ spring:
       max-request-size: ${MAX_REQUEST_SIZE:10MB}
 
 app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   jwt:
     secret: ${JWT_SECRET:ZmFrZS1kZWZhdWx0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMzItYnl0ZXM=}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    access-expiration: ${JWT_ACCESS_EXPIRATION:10m}
+  auth:
+    refresh-expiration: ${REFRESH_TOKEN_EXPIRATION:30d}
+    refresh-cookie-name: ${REFRESH_COOKIE_NAME:ksef-helper-refresh}
+    refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:false}
+    email-verification-required: ${EMAIL_VERIFICATION_REQUIRED:false}
+    email-verification-expiration: ${EMAIL_VERIFICATION_EXPIRATION:24h}
+    password-reset-expiration: ${PASSWORD_RESET_EXPIRATION:30m}
+  mail:
+    delivery: ${MAIL_DELIVERY:log}
+    from: ${MAIL_FROM:no-reply@localhost}
   storage:
+    type: ${FILE_STORAGE_TYPE:local}
     local-path: ${FILE_STORAGE_PATH:uploads}
     max-upload-bytes: ${MAX_UPLOAD_BYTES:10485760}
+    s3:
+      bucket: ${S3_BUCKET:}
+      region: ${S3_REGION:eu-central-1}
+      endpoint: ${S3_ENDPOINT:}
+      path-style-access: ${S3_PATH_STYLE_ACCESS:false}
+      server-side-encryption: ${S3_SERVER_SIDE_ENCRYPTION:AES256}
+      kms-key-id: ${S3_KMS_KEY_ID:}
+    cleanup:
+      retry-delay: ${STORAGE_CLEANUP_RETRY_DELAY:5m}
   xml:
     xsd-path: ${XML_XSD_PATH:classpath:xsd/schemat_fa_vat-3-_v1-0.xsd}
     validator-script: classpath:xml-validator/validate_fa3.py

@@ -7,11 +7,13 @@ import com.ksefhelper.common.web.ApiError;
 import com.ksefhelper.invoices.dto.UploadInvoiceResponse;
 import com.ksefhelper.organizations.entity.OrganizationType;
 import com.ksefhelper.validation.PythonTestSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -50,6 +52,11 @@ class RateLimitHttpIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void disableAutomaticHttpRetries() {
+        restTemplate.getRestTemplate().setRequestFactory(new SimpleClientHttpRequestFactory());
+    }
 
     @DynamicPropertySource
     static void applicationProperties(DynamicPropertyRegistry registry) {

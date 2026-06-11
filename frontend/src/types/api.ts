@@ -11,15 +11,21 @@ export type OrganizationProfile = {
 };
 
 export type AuthResponse = {
-  token: string;
+  token: string | null;
+  accessTokenExpiresAt: string | null;
   user: {
     id: string;
     email: string;
     firstName: string;
     lastName: string;
+    emailVerified: boolean;
   };
   organization: OrganizationProfile | null;
   organizations: OrganizationProfile[];
+};
+
+export type MessageResponse = {
+  message: string;
 };
 
 export type Company = {
