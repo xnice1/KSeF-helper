@@ -1,5 +1,6 @@
 package com.ksefhelper.auth;
 
+import com.ksefhelper.audit.AuditEventService;
 import com.ksefhelper.auth.dto.RegisterRequest;
 import com.ksefhelper.auth.entity.AuthSession;
 import com.ksefhelper.auth.mail.AccountMailService;
@@ -46,6 +47,7 @@ class AuthServiceTest {
     private final RefreshSessionService refreshSessionService = mock(RefreshSessionService.class);
     private final AccountTokenService accountTokenService = mock(AccountTokenService.class);
     private final AccountMailService accountMailService = mock(AccountMailService.class);
+    private final AuditEventService auditEventService = mock(AuditEventService.class);
 
     private final AuthService authService = new AuthService(
             userRepository,
@@ -58,6 +60,7 @@ class AuthServiceTest {
             refreshSessionService,
             accountTokenService,
             accountMailService,
+            auditEventService,
             false,
             Duration.ofHours(24),
             Duration.ofMinutes(30)
@@ -72,7 +75,11 @@ class AuthServiceTest {
             ReflectionTestUtils.setField(user, "id", UUID.randomUUID());
             return user;
         });
-        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> {
+            Organization organization = invocation.getArgument(0);
+            ReflectionTestUtils.setField(organization, "id", UUID.randomUUID());
+            return organization;
+        });
         when(membershipRepository.save(any(Membership.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(refreshSessionService.create(any(User.class), any(Organization.class))).thenReturn(
                 new RefreshSessionService.IssuedRefreshToken(

@@ -6,10 +6,19 @@ export type Permission =
   | "manageCompanies"
   | "uploadInvoices"
   | "revalidateInvoices"
-  | "deleteInvoices";
+  | "deleteInvoices"
+  | "manageDataLifecycle";
 
 const permissions: Record<MembershipRole, Permission[]> = {
-  OWNER: ["viewMembers", "inviteMembers", "manageCompanies", "uploadInvoices", "revalidateInvoices", "deleteInvoices"],
+  OWNER: [
+    "viewMembers",
+    "inviteMembers",
+    "manageCompanies",
+    "uploadInvoices",
+    "revalidateInvoices",
+    "deleteInvoices",
+    "manageDataLifecycle"
+  ],
   ACCOUNTANT: ["viewMembers", "inviteMembers", "manageCompanies", "uploadInvoices", "revalidateInvoices", "deleteInvoices"],
   EMPLOYEE: ["uploadInvoices", "revalidateInvoices"],
   CLIENT: []

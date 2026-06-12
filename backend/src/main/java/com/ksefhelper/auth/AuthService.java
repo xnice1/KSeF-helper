@@ -1,5 +1,7 @@
 package com.ksefhelper.auth;
 
+import com.ksefhelper.audit.AuditEventService;
+import com.ksefhelper.audit.AuditEventType;
 import com.ksefhelper.auth.dto.AuthResponse;
 import com.ksefhelper.auth.dto.LoginRequest;
 import com.ksefhelper.auth.dto.RegisterRequest;
@@ -28,6 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -42,6 +45,7 @@ public class AuthService {
     private final RefreshSessionService refreshSessionService;
     private final AccountTokenService accountTokenService;
     private final AccountMailService accountMailService;
+    private final AuditEventService auditEventService;
     private final boolean emailVerificationRequired;
     private final Duration verificationExpiration;
     private final Duration passwordResetExpiration;
@@ -57,6 +61,7 @@ public class AuthService {
             RefreshSessionService refreshSessionService,
             AccountTokenService accountTokenService,
             AccountMailService accountMailService,
+            AuditEventService auditEventService,
             @Value("${app.auth.email-verification-required}") boolean emailVerificationRequired,
             @Value("${app.auth.email-verification-expiration}") Duration verificationExpiration,
             @Value("${app.auth.password-reset-expiration}") Duration passwordResetExpiration
@@ -71,6 +76,7 @@ public class AuthService {
         this.refreshSessionService = refreshSessionService;
         this.accountTokenService = accountTokenService;
         this.accountMailService = accountMailService;
+        this.auditEventService = auditEventService;
         this.emailVerificationRequired = emailVerificationRequired;
         this.verificationExpiration = verificationExpiration;
         this.passwordResetExpiration = passwordResetExpiration;
@@ -103,6 +109,22 @@ public class AuthService {
         membership.setRole(MembershipRole.OWNER);
         Membership savedMembership = membershipRepository.save(membership);
         List<Membership> memberships = List.of(savedMembership);
+        auditEventService.recordForUser(
+                AuditEventType.USER_REGISTERED,
+                savedUser,
+                savedOrganization.getId(),
+                "user",
+                savedUser.getId(),
+                Map.of("organizationId", savedOrganization.getId())
+        );
+        auditEventService.recordForUser(
+                AuditEventType.ORGANIZATION_CREATED,
+                savedUser,
+                savedOrganization.getId(),
+                "organization",
+                savedOrganization.getId(),
+                Map.of("name", savedOrganization.getName(), "type", savedOrganization.getType())
+        );
 
         if (emailVerificationRequired) {
             sendVerification(savedUser);
@@ -122,7 +144,16 @@ public class AuthService {
                 .orElseThrow(() -> new BadRequestException("Invalid email or password."));
         List<Membership> memberships = memberships(user);
         Membership membership = memberships.size() == 1 ? memberships.getFirst() : null;
-        return issueAuthenticated(user, membership, memberships);
+        AuthResult result = issueAuthenticated(user, membership, memberships);
+        auditEventService.recordForUser(
+                AuditEventType.LOGIN_SUCCEEDED,
+                user,
+                membership == null ? null : membership.getOrganization().getId(),
+                "user",
+                user.getId(),
+                Map.of("organizationSelected", membership != null)
+        );
+        return result;
     }
 
     @Transactional(noRollbackFor = BadRequestException.class)
@@ -157,12 +188,21 @@ public class AuthService {
         Membership membership = membershipRepository.findByUserIdAndOrganizationId(user.getId(), organizationId)
                 .orElseThrow(() -> new ForbiddenException("You do not belong to the selected organization."));
         refreshSessionService.updateOrganization(rawRefreshToken, membership.getOrganization());
+        auditEventService.recordForUser(
+                AuditEventType.ORGANIZATION_SELECTED,
+                user,
+                organizationId,
+                "organization",
+                organizationId,
+                Map.of("name", membership.getOrganization().getName())
+        );
         return authenticatedResponse(user, membership, memberships(user));
     }
 
     @Transactional
     public void logout(String rawRefreshToken) {
         refreshSessionService.revoke(rawRefreshToken);
+        auditEventService.record(AuditEventType.LOGOUT, null, "session", null, Map.of());
     }
 
     @Transactional
@@ -178,6 +218,14 @@ public class AuthService {
         User user = accountTokenService.consume(rawToken, AccountTokenType.EMAIL_VERIFICATION);
         user.setEmailVerified(true);
         userRepository.save(user);
+        auditEventService.recordForUser(
+                AuditEventType.EMAIL_VERIFIED,
+                user,
+                null,
+                "user",
+                user.getId(),
+                Map.of()
+        );
         List<Membership> memberships = memberships(user);
         Membership membership = memberships.size() == 1 ? memberships.getFirst() : null;
         return issueAuthenticated(user, membership, memberships);
@@ -205,6 +253,14 @@ public class AuthService {
         user.incrementTokenVersion();
         userRepository.save(user);
         refreshSessionService.revokeAll(user);
+        auditEventService.recordForUser(
+                AuditEventType.PASSWORD_RESET,
+                user,
+                null,
+                "user",
+                user.getId(),
+                Map.of()
+        );
     }
 
     private AuthResult issueAuthenticated(User user, Membership membership, List<Membership> memberships) {

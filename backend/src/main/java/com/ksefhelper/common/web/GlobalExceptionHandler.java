@@ -6,6 +6,8 @@ import com.ksefhelper.common.exception.NotFoundException;
 import com.ksefhelper.common.exception.RateLimitExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -22,6 +24,8 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(BadRequestException.class)
     ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
         return error(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
@@ -69,7 +73,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ApiError> handleUnexpected(HttpServletRequest request) {
+    ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
+        LOGGER.error("Unexpected request failure method={} path={}", request.getMethod(), request.getRequestURI(), ex);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.", request);
     }
 

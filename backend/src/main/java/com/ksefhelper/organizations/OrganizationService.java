@@ -1,5 +1,7 @@
 package com.ksefhelper.organizations;
 
+import com.ksefhelper.audit.AuditEventService;
+import com.ksefhelper.audit.AuditEventType;
 import com.ksefhelper.common.exception.BadRequestException;
 import com.ksefhelper.common.exception.ForbiddenException;
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -27,19 +30,22 @@ public class OrganizationService {
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
     private final OrganizationAuthorizationService authorizationService;
+    private final AuditEventService auditEventService;
 
     public OrganizationService(
             CurrentUserService currentUserService,
             MembershipRepository membershipRepository,
             OrganizationRepository organizationRepository,
             UserRepository userRepository,
-            OrganizationAuthorizationService authorizationService
+            OrganizationAuthorizationService authorizationService,
+            AuditEventService auditEventService
     ) {
         this.currentUserService = currentUserService;
         this.membershipRepository = membershipRepository;
         this.organizationRepository = organizationRepository;
         this.userRepository = userRepository;
         this.authorizationService = authorizationService;
+        this.auditEventService = auditEventService;
     }
 
     @Transactional(readOnly = true)
@@ -71,6 +77,14 @@ public class OrganizationService {
         membership.setOrganization(savedOrganization);
         membership.setRole(MembershipRole.OWNER);
         membershipRepository.save(membership);
+        auditEventService.recordForUser(
+                AuditEventType.ORGANIZATION_CREATED,
+                user,
+                savedOrganization.getId(),
+                "organization",
+                savedOrganization.getId(),
+                Map.of("name", savedOrganization.getName(), "type", savedOrganization.getType())
+        );
 
         return toResponse(savedOrganization);
     }
@@ -104,7 +118,19 @@ public class OrganizationService {
         membership.setUser(invitedUser);
         membership.setOrganization(organization);
         membership.setRole(request.role());
-        return toResponse(membershipRepository.save(membership));
+        Membership saved = membershipRepository.save(membership);
+        auditEventService.record(
+                AuditEventType.ORGANIZATION_MEMBER_INVITED,
+                organizationId,
+                "membership",
+                saved.getId(),
+                Map.of(
+                        "invitedUserId", invitedUser.getId(),
+                        "invitedEmail", invitedUser.getEmail(),
+                        "role", request.role()
+                )
+        );
+        return toResponse(saved);
     }
 
     private Membership ensureActiveOrganization(UUID organizationId) {

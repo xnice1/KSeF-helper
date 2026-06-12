@@ -43,11 +43,50 @@ pg_restore --clean --if-exists --no-owner --dbname=ksef_helper_restore ksef-help
 
 Start a staging backend against the restored database and verify login, organization isolation, invoice listing, object downloads, and checksums before promoting a restore.
 
+The automated restore drill is part of the backend test suite:
+
+```bash
+cd backend
+mvn -Dtest=PostgresBackupRestoreIntegrationTest test
+```
+
+It starts PostgreSQL with Testcontainers, applies every Flyway migration, inserts tenant and audit data, runs `pg_dump`, restores into a new database, and verifies the data and append-only audit trigger. Docker must be available locally; GitHub Actions provides it automatically.
+
 ## Object Restore
 
 Restore deleted or overwritten objects from the bucket's version history. The `stored_files.storage_path` value is the object key. After restore, download the invoice through the application; checksum verification will reject incorrect content.
 
 Database backups and bucket versions must use compatible retention windows. Restoring only PostgreSQL can reference object versions that have already expired.
+
+## Data Retention
+
+Set `INVOICE_RETENTION_DAYS` to the number of days invoices and their stored XML files may remain in the service. The default value is `0`, which disables automatic deletion. Set `RETENTION_POLL_INTERVAL` with a Spring duration such as `1h` or `15m`.
+
+Expired invoices are deleted in batches of 100. Database deletion and creation of the storage-deletion task commit together; object deletion runs after commit and uses the normal retry queue. Every retention deletion creates an `INVOICE_RETENTION_DELETED` audit event.
+
+Choose the value from the published retention policy and customer contract. Do not enable a shorter runtime value than the contractual retention period.
+
+## Customer Export And Deletion
+
+Organization owners can download a ZIP export from `GET /api/organizations/current/export`. The export contains:
+
+- organization, membership, and company records
+- invoice metadata and line items
+- validation messages
+- audit events
+- original XML files with checksum verification
+
+Organization deletion requires the account password and the exact organization name. Account deletion requires the account password and the confirmation text `DELETE`. Deletion removes database records, schedules every stored object for deletion, and records a surviving scalar audit event.
+
+An account cannot be deleted while it is the sole owner of an organization that still has other members. Ownership must be transferred or the organization must be deleted first.
+
+## Audit Events
+
+`audit_events` is append-only. PostgreSQL triggers reject `UPDATE` and `DELETE`, and the table deliberately stores scalar user and organization identifiers without foreign keys so security history survives customer-data deletion.
+
+Organization owners can view the latest 200 events from `GET /api/organizations/current/audit-events`. Events cover authentication, organization changes, invoice upload/revalidation/download/deletion, retention deletion, account deletion, and platform-admin account status changes.
+
+Back up audit events with PostgreSQL. Limit direct database write privileges so only the migration owner can alter the append-only trigger or table definition.
 
 ## Deletion Queue
 

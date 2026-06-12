@@ -1,5 +1,7 @@
 package com.ksefhelper.invoices;
 
+import com.ksefhelper.audit.AuditEventService;
+import com.ksefhelper.audit.AuditEventType;
 import com.ksefhelper.common.exception.NotFoundException;
 import com.ksefhelper.companies.CompanyService;
 import com.ksefhelper.companies.entity.Company;
@@ -38,6 +40,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -54,6 +57,7 @@ public class InvoiceService {
     private final InvoiceMapper invoiceMapper;
     private final OrganizationAuthorizationService authorizationService;
     private final RateLimitService rateLimitService;
+    private final AuditEventService auditEventService;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
@@ -67,7 +71,8 @@ public class InvoiceService {
             BusinessValidationService businessValidationService,
             InvoiceMapper invoiceMapper,
             OrganizationAuthorizationService authorizationService,
-            RateLimitService rateLimitService
+            RateLimitService rateLimitService,
+            AuditEventService auditEventService
     ) {
         this.invoiceRepository = invoiceRepository;
         this.validationResultRepository = validationResultRepository;
@@ -81,6 +86,7 @@ public class InvoiceService {
         this.invoiceMapper = invoiceMapper;
         this.authorizationService = authorizationService;
         this.rateLimitService = rateLimitService;
+        this.auditEventService = auditEventService;
     }
 
     @Transactional
@@ -100,6 +106,17 @@ public class InvoiceService {
         Invoice savedInvoice = invoiceRepository.save(invoice);
         ValidationResult validationResult = createValidationResult(savedInvoice, issues, validationStatus(invoiceStatus));
         ValidationResult savedValidationResult = validationResultRepository.save(validationResult);
+        auditEventService.record(
+                AuditEventType.INVOICE_UPLOADED,
+                organization.getId(),
+                "invoice",
+                savedInvoice.getId(),
+                Map.of(
+                        "invoiceNumber", value(savedInvoice.getInvoiceNumber()),
+                        "status", savedInvoice.getStatus(),
+                        "filename", storedFile.getOriginalFilename()
+                )
+        );
 
         return new UploadInvoiceResponse(
                 savedInvoice.getId(),
@@ -130,6 +147,13 @@ public class InvoiceService {
 
         invoiceRepository.save(invoice);
         ValidationResult savedResult = validationResultRepository.save(result);
+        auditEventService.record(
+                AuditEventType.INVOICE_REVALIDATED,
+                invoice.getOrganization().getId(),
+                "invoice",
+                invoice.getId(),
+                Map.of("status", invoice.getStatus())
+        );
         return new InvoiceValidationResponse(
                 invoice.getId(),
                 savedResult.getStatus(),
@@ -178,11 +202,21 @@ public class InvoiceService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public DownloadedInvoiceFile downloadOriginal(UUID id) {
         authorizationService.require(OrganizationPermission.DOWNLOAD_INVOICES);
         Invoice invoice = findScoped(id);
         Resource resource = fileStorageService.load(invoice.getFile());
+        auditEventService.record(
+                AuditEventType.INVOICE_DOWNLOADED,
+                invoice.getOrganization().getId(),
+                "invoice",
+                invoice.getId(),
+                Map.of(
+                        "invoiceNumber", value(invoice.getInvoiceNumber()),
+                        "filename", invoice.getFile().getOriginalFilename()
+                )
+        );
         return new DownloadedInvoiceFile(resource, invoice.getFile().getOriginalFilename(), invoice.getFile().getContentType());
     }
 
@@ -191,6 +225,16 @@ public class InvoiceService {
         authorizationService.require(OrganizationPermission.DELETE_INVOICES);
         Invoice invoice = findScoped(id);
         StoredFile file = invoice.getFile();
+        auditEventService.record(
+                AuditEventType.INVOICE_DELETED,
+                invoice.getOrganization().getId(),
+                "invoice",
+                invoice.getId(),
+                Map.of(
+                        "invoiceNumber", value(invoice.getInvoiceNumber()),
+                        "storageKey", file.getStoragePath()
+                )
+        );
         fileStorageService.scheduleDeletion(file);
         invoiceRepository.delete(invoice);
         storedFileRepository.delete(file);
@@ -299,6 +343,10 @@ public class InvoiceService {
             case WARNING -> ValidationStatus.WARNING;
             default -> ValidationStatus.INVALID;
         };
+    }
+
+    private String value(String value) {
+        return value == null ? "" : value;
     }
 
     public record DownloadedInvoiceFile(Resource resource, String originalFilename, String contentType) {

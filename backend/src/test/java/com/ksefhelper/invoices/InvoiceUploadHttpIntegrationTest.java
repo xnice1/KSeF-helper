@@ -1,5 +1,7 @@
 package com.ksefhelper.invoices;
 
+import com.ksefhelper.audit.dto.AuditEventResponse;
+import com.ksefhelper.audit.AuditEventType;
 import com.ksefhelper.auth.dto.AuthResponse;
 import com.ksefhelper.auth.dto.ResetPasswordRequest;
 import com.ksefhelper.auth.dto.TokenRequest;
@@ -17,10 +19,13 @@ import com.ksefhelper.files.entity.StoredFile;
 import com.ksefhelper.files.repository.StoredFileRepository;
 import com.ksefhelper.files.storage.ObjectStorage;
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
+import com.ksefhelper.organizations.dto.OrganizationDeletionRequest;
 import com.ksefhelper.organizations.dto.OrganizationRequest;
 import com.ksefhelper.organizations.dto.OrganizationResponse;
 import com.ksefhelper.organizations.entity.MembershipRole;
 import com.ksefhelper.organizations.entity.OrganizationType;
+import com.ksefhelper.retention.RetentionCleanupService;
+import com.ksefhelper.users.dto.AccountDeletionRequest;
 import com.ksefhelper.validation.PythonTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,9 +56,13 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.sql.Timestamp;
 import java.util.HexFormat;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.zip.ZipInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -84,6 +93,9 @@ class InvoiceUploadHttpIntegrationTest {
     @Autowired
     private ObjectStorage objectStorage;
 
+    @Autowired
+    private RetentionCleanupService retentionCleanupService;
+
     @LocalServerPort
     private int serverPort;
 
@@ -94,6 +106,7 @@ class InvoiceUploadHttpIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("app.storage.local-path", STORAGE_ROOT::toString);
         registry.add("app.xml.validator-command", PythonTestSupport::command);
+        registry.add("app.data.retention.invoice-days", () -> "30");
     }
 
     @Test
@@ -424,6 +437,173 @@ class InvoiceUploadHttpIntegrationTest {
         assertThat(completedTasks).isEqualTo(1);
     }
 
+    @Test
+    void recordsAppendOnlyAuditEventsAndExportsOrganizationData() throws IOException {
+        RegisteredUser owner = registerUser("audit-export");
+        UploadInvoiceResponse upload = upload(owner.token(), officialSample()).getBody();
+        assertThat(upload).isNotNull();
+        assertStatus(
+                owner.token(),
+                HttpMethod.GET,
+                "/api/invoices/" + upload.invoiceId() + "/download-original",
+                null,
+                200
+        );
+
+        ResponseEntity<AuditEventResponse[]> auditResponse = restTemplate.exchange(
+                "/api/organizations/current/audit-events",
+                HttpMethod.GET,
+                authorizedEntity(owner.token(), null),
+                AuditEventResponse[].class
+        );
+        assertThat(auditResponse.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(auditResponse.getBody())
+                .extracting(AuditEventResponse::eventType)
+                .contains(AuditEventType.INVOICE_UPLOADED, AuditEventType.INVOICE_DOWNLOADED);
+
+        ResponseEntity<byte[]> exportResponse = restTemplate.exchange(
+                "/api/organizations/current/export",
+                HttpMethod.GET,
+                authorizedEntity(owner.token(), null),
+                byte[].class
+        );
+        assertThat(exportResponse.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(exportResponse.getHeaders().getContentType()).isEqualTo(MediaType.parseMediaType("application/zip"));
+        Set<String> entries = zipEntries(java.util.Objects.requireNonNull(exportResponse.getBody()));
+        assertThat(entries)
+                .contains("manifest.json", "organization.json", "members.json", "invoices.json", "audit-events.json")
+                .anyMatch(name -> name.startsWith("files/" + upload.invoiceId()));
+
+        UUID auditId = jdbcTemplate.queryForObject(
+                "SELECT id FROM audit_events WHERE organization_id = ? ORDER BY occurred_at DESC LIMIT 1",
+                UUID.class,
+                owner.organizationId()
+        );
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE audit_events SET metadata = '{}' WHERE id = ?",
+                auditId
+        )).hasMessageContaining("append-only");
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "DELETE FROM audit_events WHERE id = ?",
+                auditId
+        )).hasMessageContaining("append-only");
+    }
+
+    @Test
+    void restrictsAuditExportAndOrganizationDeletionToOwners() {
+        RegisteredUser owner = registerUser("lifecycle-owner");
+        RegisteredUser client = registerUser("lifecycle-client");
+        invite(owner, client.email(), MembershipRole.CLIENT);
+        String clientToken = switchOrganization(client.token(), owner.organizationId()).token();
+
+        assertStatus(clientToken, HttpMethod.GET, "/api/organizations/current/audit-events", null, 403);
+        assertStatus(clientToken, HttpMethod.GET, "/api/organizations/current/export", null, 403);
+        assertStatus(
+                clientToken,
+                HttpMethod.DELETE,
+                "/api/organizations/current",
+                new OrganizationDeletionRequest("strong-password", "Integration Organization"),
+                403
+        );
+    }
+
+    @Test
+    void permanentlyDeletesAnOrganizationAndItsStoredObjects() {
+        RegisteredUser owner = registerUser("organization-delete");
+        UploadInvoiceResponse upload = upload(owner.token(), officialSample()).getBody();
+        assertThat(upload).isNotNull();
+        StoredFile file = storedFile(upload.invoiceId());
+
+        assertStatus(
+                owner.token(),
+                HttpMethod.DELETE,
+                "/api/organizations/current",
+                new OrganizationDeletionRequest("strong-password", "Integration Organization"),
+                204
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM organizations WHERE id = ?",
+                Integer.class,
+                owner.organizationId()
+        )).isZero();
+        assertThat(objectStorage.exists(file.getStoragePath())).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE organization_id = ? AND event_type = 'ORGANIZATION_DELETED'",
+                Integer.class,
+                owner.organizationId()
+        )).isEqualTo(1);
+        assertStatus(owner.token(), HttpMethod.GET, "/api/invoices", null, 403);
+    }
+
+    @Test
+    void permanentlyDeletesAnAccountAndItsSoleOrganization() {
+        RegisteredUser owner = registerUser("account-delete");
+        UploadInvoiceResponse upload = upload(owner.token(), officialSample()).getBody();
+        assertThat(upload).isNotNull();
+        StoredFile file = storedFile(upload.invoiceId());
+        UUID userId = userId(owner.email());
+
+        assertStatus(
+                owner.token(),
+                HttpMethod.DELETE,
+                "/api/account",
+                new AccountDeletionRequest("strong-password", "DELETE"),
+                204
+        );
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM app_users WHERE id = ?",
+                Integer.class,
+                userId
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM organizations WHERE id = ?",
+                Integer.class,
+                owner.organizationId()
+        )).isZero();
+        assertThat(objectStorage.exists(file.getStoragePath())).isFalse();
+        assertThat(login(owner.email(), "strong-password").getStatusCode().value()).isEqualTo(401);
+        assertStatus(owner.token(), HttpMethod.GET, "/api/invoices", null, 403);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE actor_user_id = ? AND event_type = 'ACCOUNT_DELETED'",
+                Integer.class,
+                userId
+        )).isEqualTo(1);
+    }
+
+    @Test
+    void retentionCleanupDeletesExpiredInvoicesAndStoredObjects() {
+        RegisteredUser owner = registerUser("retention");
+        UploadInvoiceResponse upload = upload(owner.token(), officialSample()).getBody();
+        assertThat(upload).isNotNull();
+        StoredFile file = storedFile(upload.invoiceId());
+        jdbcTemplate.update(
+                "UPDATE invoices SET created_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(31L * 24 * 60 * 60)),
+                upload.invoiceId()
+        );
+
+        retentionCleanupService.processExpired();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM invoices WHERE id = ?",
+                Integer.class,
+                upload.invoiceId()
+        )).isZero();
+        assertThat(objectStorage.exists(file.getStoragePath())).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM audit_events
+                WHERE organization_id = ? AND event_type = 'INVOICE_RETENTION_DELETED'
+                """,
+                Integer.class,
+                owner.organizationId()
+        )).isEqualTo(1);
+        assertStatus(owner.token(), HttpMethod.GET, "/api/invoices/" + upload.invoiceId(), null, 404);
+    }
+
     private String register() {
         return registerUser("integration").token();
     }
@@ -498,7 +678,9 @@ class InvoiceUploadHttpIntegrationTest {
                 authorizedEntity(token, body),
                 String.class
         );
-        assertThat(response.getStatusCode().value()).as("%s %s", method, path).isEqualTo(expectedStatus);
+        assertThat(response.getStatusCode().value())
+                .as("%s %s response=%s", method, path, response.getBody())
+                .isEqualTo(expectedStatus);
     }
 
     private void assertUploadStatus(String token, int expectedStatus) {
@@ -589,6 +771,18 @@ class InvoiceUploadHttpIntegrationTest {
                 invoiceId
         );
         return storedFileRepository.findById(java.util.Objects.requireNonNull(fileId)).orElseThrow();
+    }
+
+    private Set<String> zipEntries(byte[] bytes) throws IOException {
+        Set<String> entries = new HashSet<>();
+        try (ZipInputStream zip = new ZipInputStream(new java.io.ByteArrayInputStream(bytes))) {
+            var entry = zip.getNextEntry();
+            while (entry != null) {
+                entries.add(entry.getName());
+                entry = zip.getNextEntry();
+            }
+        }
+        return entries;
     }
 
     private String sha256(String value) {

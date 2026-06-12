@@ -1,4 +1,4 @@
-import { Building2, FileCheck2, FileText, LayoutDashboard, LogOut, Upload } from "lucide-react";
+import { Building2, FileCheck2, FileText, LayoutDashboard, LogOut, Settings, Upload } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { hasPermission } from "../auth/permissions";
@@ -8,7 +8,8 @@ const links = [
   { to: "/app/upload", label: "Upload", icon: Upload, permission: "uploadInvoices" as const },
   { to: "/app/invoices", label: "Archive", icon: FileText },
   { to: "/app/validation", label: "Validation", icon: FileCheck2 },
-  { to: "/app/companies", label: "Companies", icon: Building2 }
+  { to: "/app/companies", label: "Companies", icon: Building2 },
+  { to: "/app/settings", label: "Settings", icon: Settings }
 ];
 
 export function AppLayout() {

@@ -15,4 +15,8 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
     List<Membership> findAllByOrganizationId(UUID organizationId);
 
     boolean existsByUserIdAndOrganizationId(UUID userId, UUID organizationId);
+
+    long countByOrganizationId(UUID organizationId);
+
+    long countByOrganizationIdAndRole(UUID organizationId, com.ksefhelper.organizations.entity.MembershipRole role);
 }

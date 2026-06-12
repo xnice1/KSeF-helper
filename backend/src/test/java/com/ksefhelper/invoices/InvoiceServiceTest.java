@@ -1,5 +1,6 @@
 package com.ksefhelper.invoices;
 
+import com.ksefhelper.audit.AuditEventService;
 import com.ksefhelper.files.FileStorageService;
 import com.ksefhelper.files.entity.StoredFile;
 import com.ksefhelper.invoices.dto.InvoiceValidationResponse;
@@ -9,6 +10,7 @@ import com.ksefhelper.invoices.repository.InvoiceRepository;
 import com.ksefhelper.security.CurrentUserService;
 import com.ksefhelper.security.ratelimit.RateLimitService;
 import com.ksefhelper.organizations.OrganizationAuthorizationService;
+import com.ksefhelper.organizations.entity.Organization;
 import com.ksefhelper.validation.BusinessValidationService;
 import com.ksefhelper.validation.InvoiceXmlParser;
 import com.ksefhelper.validation.XmlTechnicalValidationService;
@@ -18,6 +20,7 @@ import com.ksefhelper.validation.entity.ValidationSeverity;
 import com.ksefhelper.validation.entity.ValidationStatus;
 import com.ksefhelper.validation.repository.ValidationResultRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.File;
 import java.math.BigDecimal;
@@ -83,6 +86,9 @@ class InvoiceServiceTest {
         StoredFile storedFile = new StoredFile();
         storedFile.setStoragePath(xmlFile.getAbsolutePath());
         Invoice invoice = new Invoice();
+        Organization organization = new Organization();
+        ReflectionTestUtils.setField(organization, "id", organizationId);
+        invoice.setOrganization(organization);
         invoice.setFile(storedFile);
         invoice.setStatus(InvoiceStatus.INVALID);
 
@@ -118,7 +124,8 @@ class InvoiceServiceTest {
                 new BusinessValidationService(),
                 new InvoiceMapper(),
                 mock(OrganizationAuthorizationService.class),
-                mock(RateLimitService.class)
+                mock(RateLimitService.class),
+                mock(AuditEventService.class)
         );
 
         InvoiceValidationResponse response = service.revalidate(invoiceId);

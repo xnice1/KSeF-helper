@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  AuditEvent,
   Company,
   InvoicePreview,
   InvoiceSummary,
@@ -109,6 +110,27 @@ async function refreshAccess(): Promise<AuthResponse> {
   return refreshPromise;
 }
 
+async function download(path: string, fallbackFilename: string, retry = true) {
+  const token = tokenStore.get();
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: "include"
+  });
+  if (response.status === 401 && retry) {
+    await refreshAccess();
+    return download(path, fallbackFilename, false);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, body?.message ?? "Download failed.");
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const encodedFilename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plainFilename = disposition.match(/filename="([^"]+)"/i)?.[1];
+  const filename = encodedFilename ? decodeURIComponent(encodedFilename) : plainFilename ?? fallbackFilename;
+  return { filename, blob: await response.blob() };
+}
+
 function query(params: Record<string, string | undefined>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -150,6 +172,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token, password })
     }),
+  auditEvents: () => request<AuditEvent[]>("/organizations/current/audit-events"),
+  exportOrganization: () => download("/organizations/current/export", "ksef-helper-export.zip"),
+  deleteOrganization: (password: string, confirmation: string) =>
+    request<void>("/organizations/current", {
+      method: "DELETE",
+      body: JSON.stringify({ password, confirmation })
+    }),
+  deleteAccount: (password: string, confirmation: string) =>
+    request<void>("/account", {
+      method: "DELETE",
+      body: JSON.stringify({ password, confirmation })
+    }),
 
   companies: () => request<Company[]>("/companies"),
   createCompany: (payload: CompanyPayload) =>
@@ -174,17 +208,5 @@ export const api = {
     request<InvoiceValidation>(`/invoices/${id}/revalidate`, { method: "POST" }),
   validationReport: (id: string) => request<ValidationReport>(`/reports/invoices/${id}/validation-report`),
   deleteInvoice: (id: string) => request<void>(`/invoices/${id}`, { method: "DELETE" }),
-  downloadOriginalFile: async (id: string) => {
-    const token = tokenStore.get();
-    const response = await fetch(`${API_URL}/invoices/${id}/download-original`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      credentials: "include"
-    });
-    if (!response.ok) {
-      throw new ApiError(response.status, "Original XML could not be downloaded.");
-    }
-    const disposition = response.headers.get("content-disposition") ?? "";
-    const filename = disposition.match(/filename="(.+)"/)?.[1] ?? "invoice.xml";
-    return { filename, blob: await response.blob() };
-  }
+  downloadOriginalFile: (id: string) => download(`/invoices/${id}/download-original`, "invoice.xml")
 };

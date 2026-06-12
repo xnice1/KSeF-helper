@@ -10,6 +10,7 @@ type AuthContextValue = {
   register: (payload: RegisterPayload) => Promise<AuthResponse>;
   switchOrganization: (organizationId: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearSession: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -68,6 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         await api.logout().catch(() => undefined);
+        tokenStore.clear();
+        setAuth(null);
+        queryClient.clear();
+      },
+      clearSession: () => {
         tokenStore.clear();
         setAuth(null);
         queryClient.clear();

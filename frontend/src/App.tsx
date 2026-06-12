@@ -15,6 +15,7 @@ import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { RequestVerificationPage } from "./pages/RequestVerificationPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 function Protected() {
   const { auth, loading } = useAuth();
@@ -53,6 +54,7 @@ export function App() {
         <Route path="invoices/:id" element={<InvoiceDetailsPage />} />
         <Route path="validation" element={<ValidationPage />} />
         <Route path="validation/:id" element={<ValidationPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

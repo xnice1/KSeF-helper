@@ -40,6 +40,10 @@ app:
   mail:
     delivery: ${MAIL_DELIVERY:log}
     from: ${MAIL_FROM:no-reply@localhost}
+  data:
+    retention:
+      invoice-days: ${INVOICE_RETENTION_DAYS:0}
+      poll-interval: ${RETENTION_POLL_INTERVAL:1h}
   storage:
     type: ${FILE_STORAGE_TYPE:local}
     local-path: ${FILE_STORAGE_PATH:uploads}

@@ -28,6 +28,20 @@ export type MessageResponse = {
   message: string;
 };
 
+export type AuditEvent = {
+  id: string;
+  occurredAt: string;
+  actorUserId?: string | null;
+  actorEmail?: string | null;
+  organizationId?: string | null;
+  eventType: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata: string;
+};
+
 export type Company = {
   id: string;
   organizationId: string;
