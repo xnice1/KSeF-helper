@@ -2,6 +2,7 @@ package com.ksefhelper.invoices;
 
 import com.ksefhelper.audit.dto.AuditEventResponse;
 import com.ksefhelper.audit.AuditEventType;
+import com.ksefhelper.audit.AuditRetentionService;
 import com.ksefhelper.auth.dto.AuthResponse;
 import com.ksefhelper.auth.dto.ResetPasswordRequest;
 import com.ksefhelper.auth.dto.TokenRequest;
@@ -15,10 +16,14 @@ import com.ksefhelper.invoices.dto.InvoiceSummaryResponse;
 import com.ksefhelper.invoices.dto.UploadInvoiceResponse;
 import com.ksefhelper.invoices.entity.InvoiceStatus;
 import com.ksefhelper.files.FileStorageService;
+import com.ksefhelper.files.dto.StorageDeletionTaskResponse;
 import com.ksefhelper.files.entity.StoredFile;
 import com.ksefhelper.files.repository.StoredFileRepository;
 import com.ksefhelper.files.storage.ObjectStorage;
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
+import com.ksefhelper.organizations.dto.MembershipResponse;
+import com.ksefhelper.organizations.dto.MembershipRoleRequest;
+import com.ksefhelper.organizations.dto.OwnershipTransferRequest;
 import com.ksefhelper.organizations.dto.OrganizationDeletionRequest;
 import com.ksefhelper.organizations.dto.OrganizationRequest;
 import com.ksefhelper.organizations.dto.OrganizationResponse;
@@ -57,8 +62,12 @@ import java.time.Instant;
 import java.sql.Timestamp;
 import java.util.HexFormat;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -96,6 +105,9 @@ class InvoiceUploadHttpIntegrationTest {
     @Autowired
     private RetentionCleanupService retentionCleanupService;
 
+    @Autowired
+    private AuditRetentionService auditRetentionService;
+
     @LocalServerPort
     private int serverPort;
 
@@ -107,6 +119,7 @@ class InvoiceUploadHttpIntegrationTest {
         registry.add("app.storage.local-path", STORAGE_ROOT::toString);
         registry.add("app.xml.validator-command", PythonTestSupport::command);
         registry.add("app.data.retention.invoice-days", () -> "30");
+        registry.add("app.data.export.page-size", () -> "1");
     }
 
     @Test
@@ -304,6 +317,154 @@ class InvoiceUploadHttpIntegrationTest {
     }
 
     @Test
+    void managesMembershipLifecycleAndAllowsAFormerSoleOwnerToDeleteTheirAccount() {
+        RegisteredUser originalOwner = registerUser("lifecycle-owner");
+        RegisteredUser nextOwner = registerUser("lifecycle-next-owner");
+        invite(originalOwner, nextOwner.email(), MembershipRole.CLIENT);
+        MembershipResponse nextOwnerMembership = membership(originalOwner.token(), nextOwner.email());
+
+        String nextOwnerClientToken = switchOrganization(nextOwner.token(), originalOwner.organizationId()).token();
+        assertStatus(
+                nextOwnerClientToken,
+                HttpMethod.PATCH,
+                "/api/organizations/" + originalOwner.organizationId() + "/members/" + nextOwnerMembership.id(),
+                new MembershipRoleRequest(MembershipRole.ACCOUNTANT),
+                403
+        );
+
+        ResponseEntity<MembershipResponse> roleChange = restTemplate.exchange(
+                "/api/organizations/{organizationId}/members/{membershipId}",
+                HttpMethod.PATCH,
+                authorizedEntity(originalOwner.token(), new MembershipRoleRequest(MembershipRole.ACCOUNTANT)),
+                MembershipResponse.class,
+                originalOwner.organizationId(),
+                nextOwnerMembership.id()
+        );
+        assertThat(roleChange.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(roleChange.getBody()).isNotNull();
+        assertThat(roleChange.getBody().role()).isEqualTo(MembershipRole.ACCOUNTANT);
+
+        RegisteredUser removedMember = registerUser("lifecycle-removed");
+        invite(originalOwner, removedMember.email(), MembershipRole.CLIENT);
+        MembershipResponse removedMembership = membership(originalOwner.token(), removedMember.email());
+        String removedToken = switchOrganization(removedMember.token(), originalOwner.organizationId()).token();
+        assertStatus(
+                originalOwner.token(),
+                HttpMethod.DELETE,
+                "/api/organizations/" + originalOwner.organizationId() + "/members/" + removedMembership.id(),
+                null,
+                204
+        );
+        assertStatus(removedToken, HttpMethod.GET, "/api/invoices", null, 403);
+
+        RegisteredUser leavingMember = registerUser("lifecycle-leaving");
+        invite(originalOwner, leavingMember.email(), MembershipRole.EMPLOYEE);
+        String leavingToken = switchOrganization(leavingMember.token(), originalOwner.organizationId()).token();
+        assertStatus(
+                leavingToken,
+                HttpMethod.DELETE,
+                "/api/organizations/" + originalOwner.organizationId() + "/members/me",
+                null,
+                204
+        );
+        assertStatus(leavingToken, HttpMethod.GET, "/api/invoices", null, 403);
+
+        ResponseEntity<MembershipResponse> transfer = restTemplate.exchange(
+                "/api/organizations/{organizationId}/transfer-ownership",
+                HttpMethod.POST,
+                authorizedEntity(originalOwner.token(), new OwnershipTransferRequest(nextOwnerMembership.id())),
+                MembershipResponse.class,
+                originalOwner.organizationId()
+        );
+        assertThat(transfer.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(transfer.getBody()).isNotNull();
+        assertThat(transfer.getBody().role()).isEqualTo(MembershipRole.OWNER);
+        assertStatus(
+                originalOwner.token(),
+                HttpMethod.DELETE,
+                "/api/organizations/" + originalOwner.organizationId() + "/members/" + nextOwnerMembership.id(),
+                null,
+                403
+        );
+
+        assertStatus(
+                originalOwner.token(),
+                HttpMethod.DELETE,
+                "/api/account",
+                new AccountDeletionRequest("strong-password", "DELETE"),
+                204
+        );
+        assertThat(login(originalOwner.email(), "strong-password").getStatusCode().value()).isEqualTo(401);
+
+        String nextOwnerToken = switchOrganization(nextOwnerClientToken, originalOwner.organizationId()).token();
+        assertStatus(nextOwnerToken, HttpMethod.GET, "/api/organizations/current", null, 200);
+        assertStatus(
+                nextOwnerToken,
+                HttpMethod.DELETE,
+                "/api/organizations/" + originalOwner.organizationId() + "/members/me",
+                null,
+                400
+        );
+
+        Integer transferEvents = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM audit_events
+                WHERE organization_id = ?
+                  AND event_type = 'ORGANIZATION_OWNERSHIP_TRANSFERRED'
+                """,
+                Integer.class,
+                originalOwner.organizationId()
+        );
+        assertThat(transferEvents).isEqualTo(1);
+    }
+
+    @Test
+    void serializesConcurrentOwnerDemotionsAndKeepsOneOwner() throws Exception {
+        RegisteredUser firstOwner = registerUser("concurrent-owner-first");
+        RegisteredUser secondOwner = registerUser("concurrent-owner-second");
+        invite(firstOwner, secondOwner.email(), MembershipRole.OWNER);
+        MembershipResponse firstMembership = membership(firstOwner.token(), firstOwner.email());
+        MembershipResponse secondMembership = membership(firstOwner.token(), secondOwner.email());
+        String secondOwnerToken = switchOrganization(secondOwner.token(), firstOwner.organizationId()).token();
+        CountDownLatch start = new CountDownLatch(1);
+
+        CompletableFuture<Integer> firstRequest = CompletableFuture.supplyAsync(() -> {
+            await(start);
+            return changeRoleStatus(
+                    firstOwner.token(),
+                    firstOwner.organizationId(),
+                    secondMembership.id(),
+                    MembershipRole.ACCOUNTANT
+            );
+        });
+        CompletableFuture<Integer> secondRequest = CompletableFuture.supplyAsync(() -> {
+            await(start);
+            return changeRoleStatus(
+                    secondOwnerToken,
+                    firstOwner.organizationId(),
+                    firstMembership.id(),
+                    MembershipRole.ACCOUNTANT
+            );
+        });
+
+        start.countDown();
+        List<Integer> statuses = List.of(
+                firstRequest.get(10, TimeUnit.SECONDS),
+                secondRequest.get(10, TimeUnit.SECONDS)
+        );
+
+        assertThat(statuses).contains(200);
+        assertThat(statuses).allMatch(status -> status == 200 || status == 403);
+        Integer owners = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM memberships WHERE organization_id = ? AND role = 'OWNER'",
+                Integer.class,
+                firstOwner.organizationId()
+        );
+        assertThat(owners).isEqualTo(1);
+    }
+
+    @Test
     void rotatesRefreshTokensAndRevokesTheFamilyWhenAnOldTokenIsReused() {
         ResponseEntity<AuthResponse> registration = registerResponse("refresh-rotation");
         String firstCookie = refreshCookie(registration);
@@ -380,6 +541,35 @@ class InvoiceUploadHttpIntegrationTest {
     }
 
     @Test
+    void recordsSecurityFailuresAndReturnsAccountSecurityHistory() {
+        RegisteredUser user = registerUser("security-history");
+        assertThat(login(user.email(), "strong-password").getStatusCode().is2xxSuccessful()).isTrue();
+        Integer failuresBefore = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_type = 'AUTHENTICATION_FAILED'",
+                Integer.class
+        );
+
+        assertThat(login(user.email(), "incorrect-password").getStatusCode().value()).isEqualTo(401);
+
+        Integer failuresAfter = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_type = 'AUTHENTICATION_FAILED'",
+                Integer.class
+        );
+        assertThat(failuresAfter).isEqualTo(failuresBefore + 1);
+
+        ResponseEntity<AuditEventResponse[]> history = restTemplate.exchange(
+                "/api/account/audit-events",
+                HttpMethod.GET,
+                authorizedEntity(user.token(), null),
+                AuditEventResponse[].class
+        );
+        assertThat(history.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(history.getBody())
+                .extracting(AuditEventResponse::eventType)
+                .contains(AuditEventType.USER_REGISTERED, AuditEventType.LOGIN_SUCCEEDED);
+    }
+
+    @Test
     void platformAdminCanDisableAnAccountAndRevokeItsSessions() {
         RegisteredUser admin = registerUser("platform-admin");
         ResponseEntity<AuthResponse> targetRegistration = registerResponse("disabled-user");
@@ -398,6 +588,60 @@ class InvoiceUploadHttpIntegrationTest {
 
         assertThat(login(target.user().email(), "strong-password").getStatusCode().value()).isEqualTo(401);
         assertThat(refresh(targetCookie).getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    void platformAdminCanInspectAndRequeueStorageDeletionDeadLetters() {
+        RegisteredUser admin = registerUser("storage-admin");
+        RegisteredUser ordinaryUser = registerUser("storage-non-admin");
+        jdbcTemplate.update("UPDATE app_users SET platform_admin = TRUE WHERE id = ?", userId(admin.email()));
+        UUID taskId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO storage_deletion_tasks(
+                    id, storage_key, attempts, next_attempt_at, failed_at, last_error, created_at, updated_at
+                ) VALUES (?, ?, 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'access denied',
+                          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                taskId,
+                "missing/dead-letter.xml"
+        );
+
+        assertStatus(
+                ordinaryUser.token(),
+                HttpMethod.GET,
+                "/api/admin/storage-deletions/failed",
+                null,
+                403
+        );
+        ResponseEntity<StorageDeletionTaskResponse[]> failed = restTemplate.exchange(
+                "/api/admin/storage-deletions/failed",
+                HttpMethod.GET,
+                authorizedEntity(admin.token(), null),
+                StorageDeletionTaskResponse[].class
+        );
+        assertThat(failed.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(failed.getBody()).extracting(StorageDeletionTaskResponse::id).contains(taskId);
+
+        assertStatus(
+                admin.token(),
+                HttpMethod.POST,
+                "/api/admin/storage-deletions/" + taskId + "/requeue",
+                null,
+                200
+        );
+        Integer completed = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM storage_deletion_tasks WHERE id = ? AND completed_at IS NOT NULL",
+                Integer.class,
+                taskId
+        );
+        assertThat(completed).isEqualTo(1);
+        Integer auditEvents = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_type = 'STORAGE_DELETION_REQUEUED' AND target_id = ?",
+                Integer.class,
+                taskId.toString()
+        );
+        assertThat(auditEvents).isEqualTo(1);
     }
 
     @Test
@@ -441,7 +685,9 @@ class InvoiceUploadHttpIntegrationTest {
     void recordsAppendOnlyAuditEventsAndExportsOrganizationData() throws IOException {
         RegisteredUser owner = registerUser("audit-export");
         UploadInvoiceResponse upload = upload(owner.token(), officialSample()).getBody();
+        UploadInvoiceResponse secondUpload = upload(owner.token(), officialSample()).getBody();
         assertThat(upload).isNotNull();
+        assertThat(secondUpload).isNotNull();
         assertStatus(
                 owner.token(),
                 HttpMethod.GET,
@@ -473,6 +719,7 @@ class InvoiceUploadHttpIntegrationTest {
         assertThat(entries)
                 .contains("manifest.json", "organization.json", "members.json", "invoices.json", "audit-events.json")
                 .anyMatch(name -> name.startsWith("files/" + upload.invoiceId()));
+        assertThat(entries).anyMatch(name -> name.startsWith("files/" + secondUpload.invoiceId()));
 
         UUID auditId = jdbcTemplate.queryForObject(
                 "SELECT id FROM audit_events WHERE organization_id = ? ORDER BY occurred_at DESC LIMIT 1",
@@ -564,7 +811,7 @@ class InvoiceUploadHttpIntegrationTest {
         )).isZero();
         assertThat(objectStorage.exists(file.getStoragePath())).isFalse();
         assertThat(login(owner.email(), "strong-password").getStatusCode().value()).isEqualTo(401);
-        assertStatus(owner.token(), HttpMethod.GET, "/api/invoices", null, 403);
+        assertStatus(owner.token(), HttpMethod.GET, "/api/invoices", null, 401);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM audit_events WHERE actor_user_id = ? AND event_type = 'ACCOUNT_DELETED'",
                 Integer.class,
@@ -602,6 +849,38 @@ class InvoiceUploadHttpIntegrationTest {
                 owner.organizationId()
         )).isEqualTo(1);
         assertStatus(owner.token(), HttpMethod.GET, "/api/invoices/" + upload.invoiceId(), null, 404);
+    }
+
+    @Test
+    void redactsAndExpiresAuditPersonalDataAccordingToPolicy() {
+        RegisteredUser owner = registerUser("audit-retention");
+        UUID redactedEventId = UUID.randomUUID();
+        UUID expiredEventId = UUID.randomUUID();
+        insertAuditEvent(redactedEventId, owner, Instant.now().minusSeconds(120L * 24 * 60 * 60));
+        insertAuditEvent(expiredEventId, owner, Instant.now().minusSeconds(400L * 24 * 60 * 60));
+
+        auditRetentionService.process();
+
+        var redacted = jdbcTemplate.queryForMap(
+                """
+                SELECT actor_email, ip_address, user_agent, metadata, redacted_at
+                FROM audit_events
+                WHERE id = ?
+                """,
+                redactedEventId
+        );
+        assertThat(redacted.get("actor_email")).isNull();
+        assertThat(redacted.get("ip_address")).isNull();
+        assertThat(redacted.get("user_agent")).isNull();
+        assertThat(redacted.get("metadata")).isEqualTo("{}");
+        assertThat(redacted.get("redacted_at")).isNotNull();
+
+        Integer expiredCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE id = ?",
+                Integer.class,
+                expiredEventId
+        );
+        assertThat(expiredCount).isZero();
     }
 
     private String register() {
@@ -653,6 +932,46 @@ class InvoiceUploadHttpIntegrationTest {
                 new InviteMemberRequest(email, role),
                 201
         );
+    }
+
+    private int changeRoleStatus(
+            String token,
+            UUID organizationId,
+            UUID membershipId,
+            MembershipRole role
+    ) {
+        return restTemplate.exchange(
+                "/api/organizations/{organizationId}/members/{membershipId}",
+                HttpMethod.PATCH,
+                authorizedEntity(token, new MembershipRoleRequest(role)),
+                String.class,
+                organizationId,
+                membershipId
+        ).getStatusCode().value();
+    }
+
+    private void await(CountDownLatch latch) {
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private MembershipResponse membership(String token, String email) {
+        ResponseEntity<MembershipResponse[]> response = restTemplate.exchange(
+                "/api/organizations/current/members",
+                HttpMethod.GET,
+                authorizedEntity(token, null),
+                MembershipResponse[].class
+        );
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).isNotNull();
+        return java.util.Arrays.stream(response.getBody())
+                .filter(member -> member.email().equals(email))
+                .findFirst()
+                .orElseThrow();
     }
 
     private CompanyResponse createCompany(String token, String name) {
@@ -757,6 +1076,29 @@ class InvoiceUploadHttpIntegrationTest {
                 Timestamp.from(Instant.now().plusSeconds(3600)),
                 Timestamp.from(Instant.now()),
                 Timestamp.from(Instant.now())
+        );
+    }
+
+    private void insertAuditEvent(UUID eventId, RegisteredUser user, Instant occurredAt) {
+        UUID userId = userId(user.email());
+        jdbcTemplate.update(
+                """
+                INSERT INTO audit_events (
+                    id, occurred_at, actor_user_id, actor_email, organization_id,
+                    event_type, target_type, target_id, ip_address, user_agent, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                eventId,
+                Timestamp.from(occurredAt),
+                userId,
+                user.email(),
+                user.organizationId(),
+                "LOGIN_SUCCEEDED",
+                "user",
+                userId.toString(),
+                "127.0.0.1",
+                "integration-test",
+                "{\"email\":\"" + user.email() + "\"}"
         );
     }
 

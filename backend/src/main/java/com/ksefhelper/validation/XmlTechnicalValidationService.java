@@ -29,13 +29,22 @@ public class XmlTechnicalValidationService {
             @Value("${app.xml.xsd-path}") Resource xsdResource,
             @Value("${app.xml.validator-script}") Resource validatorScript,
             @Value("${app.xml.validator-command}") String validatorCommand,
-            @Value("${app.xml.validation-timeout}") Duration validationTimeout
+            @Value("${app.xml.validation-timeout}") Duration validationTimeout,
+            @Value("${app.xml.max-concurrent-validations:2}") int maximumConcurrentValidations,
+            @Value("${app.xml.capacity-acquire-timeout:2s}") Duration capacityAcquireTimeout,
+            @Value("${app.xml.memory-limit-mb:256}") int memoryLimitMb,
+            @Value("${app.xml.cpu-limit-seconds:10}") int cpuLimitSeconds,
+            @Value("${app.xml.max-output-bytes:16384}") int maxOutputBytes
     ) throws IOException {
         this(new PythonFa3ValidationRunner(
                 xsdResource,
                 validatorScript,
                 validatorCommand,
-                validationTimeout
+                validationTimeout,
+                new ValidatorCapacityLimiter(maximumConcurrentValidations, capacityAcquireTimeout),
+                memoryLimitMb,
+                cpuLimitSeconds,
+                maxOutputBytes
         ));
     }
 

@@ -5,6 +5,8 @@ import type {
   InvoicePreview,
   InvoiceSummary,
   InvoiceValidation,
+  Membership,
+  MembershipRole,
   OrganizationType,
   MessageResponse,
   UploadInvoiceResponse,
@@ -152,6 +154,21 @@ export const api = {
   me: () => request<AuthResponse>("/auth/me"),
   switchOrganization: (organizationId: string) =>
     request<AuthResponse>(`/auth/switch-organization/${organizationId}`, { method: "POST" }),
+  organizationMembers: () => request<Membership[]>("/organizations/current/members"),
+  changeMemberRole: (organizationId: string, membershipId: string, role: MembershipRole) =>
+    request<Membership>(`/organizations/${organizationId}/members/${membershipId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role })
+    }),
+  removeMember: (organizationId: string, membershipId: string) =>
+    request<void>(`/organizations/${organizationId}/members/${membershipId}`, { method: "DELETE" }),
+  leaveOrganization: (organizationId: string) =>
+    request<void>(`/organizations/${organizationId}/members/me`, { method: "DELETE" }),
+  transferOwnership: (organizationId: string, membershipId: string) =>
+    request<Membership>(`/organizations/${organizationId}/transfer-ownership`, {
+      method: "POST",
+      body: JSON.stringify({ membershipId })
+    }),
   requestVerification: (email: string) =>
     request<MessageResponse>("/auth/request-verification", {
       method: "POST",
@@ -173,6 +190,7 @@ export const api = {
       body: JSON.stringify({ token, password })
     }),
   auditEvents: () => request<AuditEvent[]>("/organizations/current/audit-events"),
+  accountAuditEvents: () => request<AuditEvent[]>("/account/audit-events"),
   exportOrganization: () => download("/organizations/current/export", "ksef-helper-export.zip"),
   deleteOrganization: (password: string, confirmation: string) =>
     request<void>("/organizations/current", {

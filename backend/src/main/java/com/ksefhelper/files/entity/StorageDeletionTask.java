@@ -30,8 +30,14 @@ public class StorageDeletionTask extends AuditableEntity {
     private Instant completedAt;
 
     @Column(length = 1000)
-    @SuppressWarnings("unused")
     private String lastError;
+
+    private Instant claimedAt;
+
+    @Column(length = 100)
+    private String claimedBy;
+
+    private Instant failedAt;
 
     public UUID getId() {
         return id;
@@ -71,5 +77,33 @@ public class StorageDeletionTask extends AuditableEntity {
 
     public void setLastError(String lastError) {
         this.lastError = lastError;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public Instant getClaimedAt() {
+        return claimedAt;
+    }
+
+    public void setClaimedAt(Instant claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
+    public String getClaimedBy() {
+        return claimedBy;
+    }
+
+    public void setClaimedBy(String claimedBy) {
+        this.claimedBy = claimedBy;
+    }
+
+    public Instant getFailedAt() {
+        return failedAt;
+    }
+
+    public void setFailedAt(Instant failedAt) {
+        this.failedAt = failedAt;
     }
 }

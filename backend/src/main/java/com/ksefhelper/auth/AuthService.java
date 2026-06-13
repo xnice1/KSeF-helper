@@ -210,7 +210,17 @@ public class AuthService {
         userRepository.findByEmailIgnoreCase(normalizeEmail(email))
                 .filter(User::isEnabled)
                 .filter(user -> !user.isEmailVerified())
-                .ifPresent(this::sendVerification);
+                .ifPresent(user -> {
+                    sendVerification(user);
+                    auditEventService.recordForUser(
+                            AuditEventType.EMAIL_VERIFICATION_REQUESTED,
+                            user,
+                            null,
+                            "user",
+                            user.getId(),
+                            Map.of()
+                    );
+                });
     }
 
     @Transactional
@@ -242,6 +252,14 @@ public class AuthService {
                             passwordResetExpiration
                     );
                     accountMailService.sendPasswordReset(user, token);
+                    auditEventService.recordForUser(
+                            AuditEventType.PASSWORD_RESET_REQUESTED,
+                            user,
+                            null,
+                            "user",
+                            user.getId(),
+                            Map.of()
+                    );
                 });
     }
 

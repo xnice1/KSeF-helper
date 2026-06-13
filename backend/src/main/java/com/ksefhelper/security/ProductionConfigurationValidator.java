@@ -19,19 +19,37 @@ public class ProductionConfigurationValidator implements ApplicationRunner {
     private final String storageType;
     private final String mailDelivery;
     private final boolean secureRefreshCookie;
+    private final boolean permanentDeleteVersions;
+    private final int auditPersonalDataDays;
+    private final int auditRetentionDays;
+    private final String runtimeDatabaseRole;
+    private final String migrationDatabaseRole;
+    private final String auditMaintenanceDatabaseRole;
 
     public ProductionConfigurationValidator(
             @Value("${app.jwt.secret}") String jwtSecret,
             @Value("${app.cors.allowed-origins}") String allowedOrigins,
             @Value("${app.storage.type}") String storageType,
             @Value("${app.mail.delivery}") String mailDelivery,
-            @Value("${app.auth.refresh-cookie-secure}") boolean secureRefreshCookie
+            @Value("${app.auth.refresh-cookie-secure}") boolean secureRefreshCookie,
+            @Value("${app.storage.s3.permanent-delete-versions:false}") boolean permanentDeleteVersions,
+            @Value("${app.audit.personal-data-days}") int auditPersonalDataDays,
+            @Value("${app.audit.retention-days}") int auditRetentionDays,
+            @Value("${spring.datasource.username}") String runtimeDatabaseRole,
+            @Value("${spring.flyway.user:}") String migrationDatabaseRole,
+            @Value("${app.audit.maintenance.username}") String auditMaintenanceDatabaseRole
     ) {
         this.jwtSecret = jwtSecret;
         this.allowedOrigins = allowedOrigins;
         this.storageType = storageType;
         this.mailDelivery = mailDelivery;
         this.secureRefreshCookie = secureRefreshCookie;
+        this.permanentDeleteVersions = permanentDeleteVersions;
+        this.auditPersonalDataDays = auditPersonalDataDays;
+        this.auditRetentionDays = auditRetentionDays;
+        this.runtimeDatabaseRole = runtimeDatabaseRole;
+        this.migrationDatabaseRole = migrationDatabaseRole;
+        this.auditMaintenanceDatabaseRole = auditMaintenanceDatabaseRole;
     }
 
     @Override
@@ -50,6 +68,24 @@ public class ProductionConfigurationValidator implements ApplicationRunner {
         }
         if (!secureRefreshCookie) {
             throw new IllegalStateException("Production refresh cookies must be secure.");
+        }
+        if (!permanentDeleteVersions) {
+            throw new IllegalStateException("Production S3 deletion must remove every object version.");
+        }
+        if (auditPersonalDataDays <= 0 || auditRetentionDays < auditPersonalDataDays) {
+            throw new IllegalStateException(
+                    "Production audit retention must be positive and not shorter than personal-data retention."
+            );
+        }
+        if (runtimeDatabaseRole.isBlank()
+                || migrationDatabaseRole.isBlank()
+                || auditMaintenanceDatabaseRole.isBlank()
+                || runtimeDatabaseRole.equals(migrationDatabaseRole)
+                || runtimeDatabaseRole.equals(auditMaintenanceDatabaseRole)
+                || migrationDatabaseRole.equals(auditMaintenanceDatabaseRole)) {
+            throw new IllegalStateException(
+                    "Production must use distinct runtime, migration, and audit-maintenance database roles."
+            );
         }
     }
 

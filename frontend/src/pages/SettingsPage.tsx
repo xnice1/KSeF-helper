@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, ShieldCheck, Trash2 } from "lucide-react";
+import { Crown, Download, LogOut, ShieldCheck, Trash2, UserMinus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
 import { hasPermission } from "../auth/permissions";
+import type { MembershipRole } from "../types/api";
 
 function saveDownload(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -24,9 +25,11 @@ function eventLabel(value: string) {
 }
 
 export function SettingsPage() {
-  const { auth, clearSession } = useAuth();
+  const { auth, clearSession, refreshSession } = useAuth();
   const navigate = useNavigate();
   const canManageData = hasPermission(auth?.organization?.role, "manageDataLifecycle");
+  const canViewMembers = hasPermission(auth?.organization?.role, "viewMembers");
+  const canManageMembers = hasPermission(auth?.organization?.role, "manageMembers");
   const [organizationPassword, setOrganizationPassword] = useState("");
   const [organizationConfirmation, setOrganizationConfirmation] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
@@ -36,6 +39,41 @@ export function SettingsPage() {
     queryKey: ["audit-events", auth?.organization?.id],
     queryFn: api.auditEvents,
     enabled: canManageData
+  });
+  const accountAudit = useQuery({
+    queryKey: ["account-audit-events", auth?.user.id],
+    queryFn: api.accountAuditEvents
+  });
+  const members = useQuery({
+    queryKey: ["organization-members", auth?.organization?.id],
+    queryFn: api.organizationMembers,
+    enabled: canViewMembers
+  });
+  const changeRole = useMutation({
+    mutationFn: ({ membershipId, role }: { membershipId: string; role: MembershipRole }) =>
+      api.changeMemberRole(auth!.organization!.id, membershipId, role),
+    onSuccess: async () => {
+      await members.refetch();
+      await refreshSession();
+    }
+  });
+  const removeMember = useMutation({
+    mutationFn: (membershipId: string) => api.removeMember(auth!.organization!.id, membershipId),
+    onSuccess: () => members.refetch()
+  });
+  const transferOwnership = useMutation({
+    mutationFn: (membershipId: string) => api.transferOwnership(auth!.organization!.id, membershipId),
+    onSuccess: async () => {
+      await refreshSession();
+      navigate("/settings", { replace: true });
+    }
+  });
+  const leaveOrganization = useMutation({
+    mutationFn: () => api.leaveOrganization(auth!.organization!.id),
+    onSuccess: async () => {
+      await refreshSession();
+      navigate("/", { replace: true });
+    }
   });
   const exportData = useMutation({
     mutationFn: api.exportOrganization,
@@ -167,6 +205,163 @@ export function SettingsPage() {
           </section>
         </>
       ) : null}
+
+      <section className="rounded-lg border border-line bg-white p-5 shadow-soft">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={19} className="text-emerald-700" />
+          <h2 className="font-bold text-ink">Account security history</h2>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          {accountAudit.isLoading ? (
+            <p className="text-sm text-neutral-600">Loading security events...</p>
+          ) : accountAudit.data?.length ? (
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="border-b border-line text-neutral-600">
+                <tr>
+                  <th className="px-2 py-2 font-semibold">Time</th>
+                  <th className="px-2 py-2 font-semibold">Event</th>
+                  <th className="px-2 py-2 font-semibold">Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accountAudit.data.map((event) => (
+                  <tr className="border-b border-line last:border-0" key={event.id}>
+                    <td className="px-2 py-3 text-neutral-600">{new Date(event.occurredAt).toLocaleString()}</td>
+                    <td className="px-2 py-3 font-semibold text-ink">{eventLabel(event.eventType)}</td>
+                    <td className="px-2 py-3 text-neutral-600">
+                      {event.targetType ?? "account"}{event.targetId ? ` ${event.targetId}` : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-sm text-neutral-600">No account security events have been recorded yet.</p>
+          )}
+        </div>
+      </section>
+
+      {canViewMembers ? (
+        <section className="rounded-lg border border-line bg-white p-5 shadow-soft">
+          <h2 className="font-bold text-ink">Organization members</h2>
+          <div className="mt-4 overflow-x-auto">
+            {members.isLoading ? (
+              <p className="text-sm text-neutral-600">Loading members...</p>
+            ) : members.data?.length ? (
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="border-b border-line text-neutral-600">
+                  <tr>
+                    <th className="px-2 py-2 font-semibold">Member</th>
+                    <th className="px-2 py-2 font-semibold">Email</th>
+                    <th className="px-2 py-2 font-semibold">Role</th>
+                    {canManageMembers ? <th className="px-2 py-2 text-right font-semibold">Actions</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.data.map((member) => {
+                    const isCurrentUser = member.userId === auth?.user.id;
+                    return (
+                      <tr className="border-b border-line last:border-0" key={member.id}>
+                        <td className="px-2 py-3 font-semibold text-ink">
+                          {member.fullName}{isCurrentUser ? " (you)" : ""}
+                        </td>
+                        <td className="px-2 py-3 text-neutral-600">{member.email}</td>
+                        <td className="px-2 py-3">
+                          {canManageMembers ? (
+                            <select
+                              aria-label={`Role for ${member.fullName}`}
+                              className="focus-ring rounded-md border border-line px-2 py-1.5"
+                              disabled={changeRole.isPending}
+                              value={member.role}
+                              onChange={(event) =>
+                                changeRole.mutate({
+                                  membershipId: member.id,
+                                  role: event.target.value as MembershipRole
+                                })
+                              }
+                            >
+                              <option value="OWNER">Owner</option>
+                              <option value="ACCOUNTANT">Accountant</option>
+                              <option value="EMPLOYEE">Employee</option>
+                              <option value="CLIENT">Client</option>
+                            </select>
+                          ) : (
+                            member.role
+                          )}
+                        </td>
+                        {canManageMembers ? (
+                          <td className="px-2 py-3">
+                            <div className="flex justify-end gap-2">
+                              {!isCurrentUser && member.role !== "OWNER" ? (
+                                <button
+                                  className="focus-ring inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 font-semibold text-neutral-700"
+                                  disabled={transferOwnership.isPending}
+                                  onClick={() => {
+                                    if (window.confirm(`Transfer ownership to ${member.fullName}? Your role will become Accountant.`)) {
+                                      transferOwnership.mutate(member.id);
+                                    }
+                                  }}
+                                >
+                                  <Crown size={15} />
+                                  Transfer
+                                </button>
+                              ) : null}
+                              {!isCurrentUser ? (
+                                <button
+                                  aria-label={`Remove ${member.fullName}`}
+                                  className="focus-ring inline-flex items-center rounded-md border border-rose-200 p-2 text-rose-700"
+                                  disabled={removeMember.isPending}
+                                  title="Remove member"
+                                  onClick={() => {
+                                    if (window.confirm(`Remove ${member.fullName} from this organization?`)) {
+                                      removeMember.mutate(member.id);
+                                    }
+                                  }}
+                                >
+                                  <UserMinus size={16} />
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-neutral-600">No organization members were found.</p>
+            )}
+          </div>
+          {changeRole.error || removeMember.error || transferOwnership.error ? (
+            <p className="mt-3 text-sm text-rose-700">
+              {errorMessage(changeRole.error ?? removeMember.error ?? transferOwnership.error)}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      <section className="rounded-lg border border-line bg-white p-5 shadow-soft">
+        <h2 className="font-bold text-ink">Leave organization</h2>
+        <p className="mt-1 text-sm text-neutral-600">
+          Removes your membership from {auth?.organization?.name}. The last owner must transfer ownership first.
+        </p>
+        <button
+          className="focus-ring mt-4 inline-flex items-center gap-2 rounded-md border border-line px-4 py-2 text-sm font-semibold text-neutral-700 disabled:opacity-60"
+          disabled={leaveOrganization.isPending}
+          onClick={() => {
+            if (window.confirm(`Leave ${auth?.organization?.name}?`)) {
+              leaveOrganization.mutate();
+            }
+          }}
+        >
+          <LogOut size={17} />
+          {leaveOrganization.isPending ? "Leaving..." : "Leave organization"}
+        </button>
+        {leaveOrganization.error ? (
+          <p className="mt-3 text-sm text-rose-700">{errorMessage(leaveOrganization.error)}</p>
+        ) : null}
+      </section>
 
       <section className="rounded-lg border border-rose-200 bg-white p-5 shadow-soft">
         <h2 className="font-bold text-rose-800">Delete account</h2>

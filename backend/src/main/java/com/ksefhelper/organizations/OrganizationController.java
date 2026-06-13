@@ -1,13 +1,17 @@
 package com.ksefhelper.organizations;
 
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
+import com.ksefhelper.organizations.dto.MembershipRoleRequest;
 import com.ksefhelper.organizations.dto.MembershipResponse;
+import com.ksefhelper.organizations.dto.OwnershipTransferRequest;
 import com.ksefhelper.organizations.dto.OrganizationRequest;
 import com.ksefhelper.organizations.dto.OrganizationResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,5 +55,34 @@ public class OrganizationController {
     @ResponseStatus(HttpStatus.CREATED)
     public MembershipResponse invite(@PathVariable UUID id, @Valid @RequestBody InviteMemberRequest request) {
         return organizationService.invite(id, request);
+    }
+
+    @PatchMapping("/{id}/members/{membershipId}")
+    public MembershipResponse changeRole(
+            @PathVariable UUID id,
+            @PathVariable UUID membershipId,
+            @Valid @RequestBody MembershipRoleRequest request
+    ) {
+        return organizationService.changeRole(id, membershipId, request.role());
+    }
+
+    @DeleteMapping("/{id}/members/{membershipId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeMember(@PathVariable UUID id, @PathVariable UUID membershipId) {
+        organizationService.removeMember(id, membershipId);
+    }
+
+    @DeleteMapping("/{id}/members/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leave(@PathVariable UUID id) {
+        organizationService.leave(id);
+    }
+
+    @PostMapping("/{id}/transfer-ownership")
+    public MembershipResponse transferOwnership(
+            @PathVariable UUID id,
+            @Valid @RequestBody OwnershipTransferRequest request
+    ) {
+        return organizationService.transferOwnership(id, request.membershipId());
     }
 }

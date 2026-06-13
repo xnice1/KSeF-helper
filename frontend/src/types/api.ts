@@ -10,6 +10,14 @@ export type OrganizationProfile = {
   role: MembershipRole;
 };
 
+export type Membership = {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string;
+  role: MembershipRole;
+};
+
 export type AuthResponse = {
   token: string | null;
   accessTokenExpiresAt: string | null;
@@ -40,6 +48,7 @@ export type AuditEvent = {
   ipAddress?: string | null;
   userAgent?: string | null;
   metadata: string;
+  redactedAt?: string | null;
 };
 
 export type Company = {

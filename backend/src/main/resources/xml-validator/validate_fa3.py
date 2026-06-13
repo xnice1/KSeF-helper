@@ -3,14 +3,28 @@ import sys
 from lxml import etree
 
 
+def apply_resource_limits(memory_limit_mb: int, cpu_limit_seconds: int) -> None:
+    try:
+        import resource
+    except ImportError:
+        return
+
+    memory_bytes = memory_limit_mb * 1024 * 1024
+    resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit_seconds, cpu_limit_seconds))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
+
+
 def clean(message: str) -> str:
     return " ".join(message.replace("\t", " ").split())
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("validator requires schema and XML paths")
+    if len(sys.argv) != 5:
+        print("validator requires schema, XML, memory-limit, and CPU-limit arguments")
         return 3
+
+    apply_resource_limits(int(sys.argv[3]), int(sys.argv[4]))
 
     parser = etree.XMLParser(
         resolve_entities=False,

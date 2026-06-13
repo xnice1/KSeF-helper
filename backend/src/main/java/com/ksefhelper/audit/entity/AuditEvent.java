@@ -53,6 +53,9 @@ public class AuditEvent {
     @Column(nullable = false, updatable = false, columnDefinition = "text")
     private String metadata;
 
+    @Column(updatable = false)
+    private Instant redactedAt;
+
     public UUID getId() {
         return id;
     }
@@ -95,6 +98,10 @@ public class AuditEvent {
 
     public String getMetadata() {
         return metadata;
+    }
+
+    public Instant getRedactedAt() {
+        return redactedAt;
     }
 
     public void setOccurredAt(Instant occurredAt) {

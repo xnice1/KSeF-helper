@@ -1,5 +1,7 @@
 package com.ksefhelper.common.web;
 
+import com.ksefhelper.audit.AuditEventService;
+import com.ksefhelper.audit.AuditEventType;
 import com.ksefhelper.common.exception.BadRequestException;
 import com.ksefhelper.common.exception.ForbiddenException;
 import com.ksefhelper.common.exception.NotFoundException;
@@ -20,11 +22,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MultipartException;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final AuditEventService auditEventService;
+
+    public GlobalExceptionHandler(AuditEventService auditEventService) {
+        this.auditEventService = auditEventService;
+    }
 
     @ExceptionHandler(BadRequestException.class)
     ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
@@ -38,11 +46,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({ForbiddenException.class, AccessDeniedException.class})
     ResponseEntity<ApiError> handleForbidden(RuntimeException ex, HttpServletRequest request) {
+        recordSecurityFailure(
+                AuditEventType.AUTHORIZATION_FAILED,
+                request,
+                Map.of("reason", ex.getClass().getSimpleName())
+        );
         return error(HttpStatus.FORBIDDEN, ex.getMessage(), request);
     }
 
     @ExceptionHandler({BadCredentialsException.class, AuthenticationException.class})
     ResponseEntity<ApiError> handleBadCredentials(HttpServletRequest request) {
+        recordSecurityFailure(AuditEventType.AUTHENTICATION_FAILED, request, Map.of());
         return error(HttpStatus.UNAUTHORIZED, "Invalid email or password.", request);
     }
 
@@ -94,5 +108,26 @@ public class GlobalExceptionHandler {
                 message,
                 request.getRequestURI()
         );
+    }
+
+    private void recordSecurityFailure(
+            AuditEventType eventType,
+            HttpServletRequest request,
+            Map<String, ?> metadata
+    ) {
+        try {
+            auditEventService.recordSecurity(
+                    eventType,
+                    "http_request",
+                    request.getRequestURI(),
+                    Map.of(
+                            "method", request.getMethod(),
+                            "details", metadata
+                    )
+            );
+        } catch (RuntimeException auditFailure) {
+            LOGGER.error("Security audit event could not be recorded eventType={} path={}",
+                    eventType, request.getRequestURI(), auditFailure);
+        }
     }
 }

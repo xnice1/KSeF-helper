@@ -1,4 +1,10 @@
 app:
+  audit:
+    personal-data-days: ${AUDIT_PERSONAL_DATA_DAYS}
+    retention-days: ${AUDIT_RETENTION_DAYS}
+    maintenance:
+      username: ${DB_AUDIT_MAINTENANCE_ROLE}
+      password: ${DB_AUDIT_MAINTENANCE_PASSWORD}
   jwt:
     secret: ${JWT_SECRET}
   cors:
@@ -12,11 +18,21 @@ app:
     type: s3
     s3:
       bucket: ${S3_BUCKET}
+      permanent-delete-versions: true
 
 server:
   forward-headers-strategy: framework
 
 spring:
+  datasource:
+    username: ${DB_RUNTIME_ROLE}
+    password: ${DB_RUNTIME_PASSWORD}
+  flyway:
+    user: ${DB_MIGRATION_ROLE}
+    password: ${DB_MIGRATION_PASSWORD}
+    placeholders:
+      runtimeRole: ${DB_RUNTIME_ROLE}
+      auditMaintenanceRole: ${DB_AUDIT_MAINTENANCE_ROLE}
   mail:
     host: ${SMTP_HOST}
     port: ${SMTP_PORT:587}

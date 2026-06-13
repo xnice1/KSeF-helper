@@ -18,12 +18,24 @@ spring:
         format_sql: true
   flyway:
     enabled: true
+    placeholders:
+      runtimeRole: ${DB_RUNTIME_ROLE:${SPRING_DATASOURCE_USERNAME:ksef}}
+      auditMaintenanceRole: ${DB_AUDIT_MAINTENANCE_ROLE:${SPRING_DATASOURCE_USERNAME:ksef}}
   servlet:
     multipart:
       max-file-size: ${MAX_FILE_SIZE:10MB}
       max-request-size: ${MAX_REQUEST_SIZE:10MB}
 
 app:
+  audit:
+    personal-data-days: ${AUDIT_PERSONAL_DATA_DAYS:90}
+    retention-days: ${AUDIT_RETENTION_DAYS:365}
+    cleanup:
+      poll-interval: ${AUDIT_CLEANUP_POLL_INTERVAL:24h}
+    maintenance:
+      url: ${AUDIT_MAINTENANCE_DATASOURCE_URL:${spring.datasource.url}}
+      username: ${AUDIT_MAINTENANCE_DATASOURCE_USERNAME:${spring.datasource.username}}
+      password: ${AUDIT_MAINTENANCE_DATASOURCE_PASSWORD:${spring.datasource.password}}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
@@ -41,6 +53,12 @@ app:
     delivery: ${MAIL_DELIVERY:log}
     from: ${MAIL_FROM:no-reply@localhost}
   data:
+    export:
+      max-bytes: ${ORGANIZATION_EXPORT_MAX_BYTES:1073741824}
+      max-invoices: ${ORGANIZATION_EXPORT_MAX_INVOICES:10000}
+      max-records: ${ORGANIZATION_EXPORT_MAX_RECORDS:250000}
+      max-archive-bytes: ${ORGANIZATION_EXPORT_MAX_ARCHIVE_BYTES:1200000000}
+      page-size: ${ORGANIZATION_EXPORT_PAGE_SIZE:100}
     retention:
       invoice-days: ${INVOICE_RETENTION_DAYS:0}
       poll-interval: ${RETENTION_POLL_INTERVAL:1h}
@@ -55,13 +73,24 @@ app:
       path-style-access: ${S3_PATH_STYLE_ACCESS:false}
       server-side-encryption: ${S3_SERVER_SIDE_ENCRYPTION:AES256}
       kms-key-id: ${S3_KMS_KEY_ID:}
+      permanent-delete-versions: ${S3_PERMANENT_DELETE_VERSIONS:false}
     cleanup:
       retry-delay: ${STORAGE_CLEANUP_RETRY_DELAY:5m}
+      max-attempts: ${STORAGE_CLEANUP_MAX_ATTEMPTS:12}
+      claim-timeout: ${STORAGE_CLEANUP_CLAIM_TIMEOUT:10m}
+      batch-size: ${STORAGE_CLEANUP_BATCH_SIZE:100}
+      pending-warning-threshold: ${STORAGE_CLEANUP_PENDING_WARNING_THRESHOLD:1000}
+      alert-interval: ${STORAGE_CLEANUP_ALERT_INTERVAL:15m}
   xml:
     xsd-path: ${XML_XSD_PATH:classpath:xsd/schemat_fa_vat-3-_v1-0.xsd}
     validator-script: classpath:xml-validator/validate_fa3.py
     validator-command: ${XML_VALIDATOR_COMMAND:python3}
     validation-timeout: ${XML_VALIDATION_TIMEOUT:10s}
+    max-concurrent-validations: ${XML_MAX_CONCURRENT_VALIDATIONS:2}
+    capacity-acquire-timeout: ${XML_CAPACITY_ACQUIRE_TIMEOUT:2s}
+    memory-limit-mb: ${XML_MEMORY_LIMIT_MB:256}
+    cpu-limit-seconds: ${XML_CPU_LIMIT_SECONDS:10}
+    max-output-bytes: ${XML_MAX_OUTPUT_BYTES:16384}
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     login:
@@ -71,3 +100,18 @@ app:
     upload:
       max-requests: ${UPLOAD_RATE_LIMIT_MAX_REQUESTS:20}
       window: ${UPLOAD_RATE_LIMIT_WINDOW:1m}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      status:
+        order: down,out-of-service,degraded,unknown,up
+        http-mapping:
+          degraded: 200

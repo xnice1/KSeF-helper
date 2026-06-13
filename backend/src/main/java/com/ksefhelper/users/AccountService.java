@@ -7,6 +7,7 @@ import com.ksefhelper.organizations.DataDeletionService;
 import com.ksefhelper.organizations.entity.Membership;
 import com.ksefhelper.organizations.entity.MembershipRole;
 import com.ksefhelper.organizations.repository.MembershipRepository;
+import com.ksefhelper.organizations.repository.OrganizationRepository;
 import com.ksefhelper.security.CurrentUserService;
 import com.ksefhelper.users.entity.User;
 import com.ksefhelper.users.repository.UserRepository;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class AccountService {
@@ -25,6 +27,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final DataDeletionService dataDeletionService;
     private final AuditEventService auditEventService;
+    private final OrganizationRepository organizationRepository;
 
     public AccountService(
             CurrentUserService currentUserService,
@@ -32,7 +35,8 @@ public class AccountService {
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             DataDeletionService dataDeletionService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            OrganizationRepository organizationRepository
     ) {
         this.currentUserService = currentUserService;
         this.membershipRepository = membershipRepository;
@@ -40,6 +44,7 @@ public class AccountService {
         this.passwordEncoder = passwordEncoder;
         this.dataDeletionService = dataDeletionService;
         this.auditEventService = auditEventService;
+        this.organizationRepository = organizationRepository;
     }
 
     @Transactional
@@ -51,6 +56,14 @@ public class AccountService {
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new BadRequestException("Password is incorrect.");
         }
+
+        List<UUID> organizationIds = membershipRepository.findAllByUserIdOrderByOrganizationNameAsc(user.getId())
+                .stream()
+                .map(membership -> membership.getOrganization().getId())
+                .sorted()
+                .toList();
+        organizationIds.forEach(organizationId -> organizationRepository.findByIdForUpdate(organizationId)
+                .orElseThrow(() -> new BadRequestException("An organization changed while deleting the account.")));
 
         List<Membership> memberships = membershipRepository.findAllByUserIdOrderByOrganizationNameAsc(user.getId());
         for (Membership membership : memberships) {

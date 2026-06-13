@@ -77,6 +77,27 @@ public class AuditEventService {
         writer.write(event(eventType, null, "system", organizationId, targetType, targetId, metadata));
     }
 
+    public void recordSecurity(
+            AuditEventType eventType,
+            String targetType,
+            Object targetId,
+            Map<String, ?> metadata
+    ) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        AppUserPrincipal principal = authentication != null && authentication.getPrincipal() instanceof AppUserPrincipal value
+                ? value
+                : null;
+        writer.write(event(
+                eventType,
+                principal == null ? null : principal.id(),
+                principal == null ? null : principal.getUsername(),
+                principal == null ? null : principal.organizationId(),
+                targetType,
+                targetId,
+                metadata
+        ));
+    }
+
     private AuditEvent event(
             AuditEventType eventType,
             UUID actorUserId,

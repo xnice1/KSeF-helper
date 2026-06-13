@@ -3,6 +3,7 @@ import type { MembershipRole } from "../types/api";
 export type Permission =
   | "viewMembers"
   | "inviteMembers"
+  | "manageMembers"
   | "manageCompanies"
   | "uploadInvoices"
   | "revalidateInvoices"
@@ -13,6 +14,7 @@ const permissions: Record<MembershipRole, Permission[]> = {
   OWNER: [
     "viewMembers",
     "inviteMembers",
+    "manageMembers",
     "manageCompanies",
     "uploadInvoices",
     "revalidateInvoices",

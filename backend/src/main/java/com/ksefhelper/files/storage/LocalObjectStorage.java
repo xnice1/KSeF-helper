@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -47,6 +48,15 @@ public class LocalObjectStorage implements ObjectStorage {
         } catch (IOException ex) {
             throw new IllegalStateException("The stored XML file could not be read.", ex);
         }
+    }
+
+    @Override
+    public void writeTo(String key, OutputStream output) throws IOException {
+        Path path = resolve(key);
+        if (!Files.isRegularFile(path)) {
+            throw new NotFoundException("Stored XML file was not found.");
+        }
+        Files.copy(path, output);
     }
 
     @Override

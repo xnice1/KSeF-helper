@@ -1,6 +1,8 @@
 package com.ksefhelper.organizations.repository;
 
 import com.ksefhelper.organizations.entity.Membership;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,6 +15,8 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
     List<Membership> findAllByUserIdOrderByOrganizationNameAsc(UUID userId);
 
     List<Membership> findAllByOrganizationId(UUID organizationId);
+
+    Slice<Membership> findByOrganizationIdOrderById(UUID organizationId, Pageable pageable);
 
     boolean existsByUserIdAndOrganizationId(UUID userId, UUID organizationId);
 

@@ -337,11 +337,11 @@ Official FA(3) sample XML files are under:
 backend/src/test/resources/sample-invoices/fa3-official/
 ```
 
-The runtime validates uploads against the official schema through a timeout-bound `lxml` worker. The Java XML parser still performs the initial well-formedness and XXE safety checks before the worker starts.
+The runtime validates uploads against the official schema through a concurrency-, timeout-, memory-, CPU-, and output-bounded `lxml` worker. The Java XML parser still performs the initial well-formedness and XXE safety checks before the worker starts.
 
-Production objects are stored under organization-scoped generated keys. Upload rollback removes the new object; failed rollback cleanup and post-commit invoice deletion use a persisted retry queue. Downloads and restores verify the stored SHA-256 checksum.
+Production objects are stored under organization-scoped generated keys. Upload rollback removes the new object; failed rollback cleanup and post-commit invoice deletion use a persisted retry queue with platform-admin dead-letter inspection and requeue controls. Downloads and restores verify the stored SHA-256 checksum.
 
-See [`docs/production-operations.md`](docs/production-operations.md) for backup, restore, S3 versioning, and platform-admin setup.
+See [`docs/production-operations.md`](docs/production-operations.md) for database-role separation, validator limits, bounded exports, backup and restore, S3 versioning, dead-letter handling, and platform-admin setup.
 
 ## Tests
 
@@ -364,7 +364,6 @@ The GitHub Actions workflow under `.github/workflows/ci.yml` runs the mandatory 
 - Accountant-client collaboration
 - Email notifications
 - Stripe or Polish payment integration
-- Audit logs
 - Subscription plans and usage limits
 
 ## License

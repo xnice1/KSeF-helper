@@ -1,63 +1,57 @@
 package com.ksefhelper.files;
 
-import com.ksefhelper.files.entity.StorageDeletionTask;
-import com.ksefhelper.files.repository.StorageDeletionTaskRepository;
-import com.ksefhelper.files.storage.ObjectStorage;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class StorageDeletionWorker {
-    private final StorageDeletionTaskRepository repository;
-    private final ObjectStorage objectStorage;
-    private final Duration retryDelay;
+    private static final Logger log = LoggerFactory.getLogger(StorageDeletionWorker.class);
+
+    private final StorageDeletionTaskClaimer claimer;
+    private final StorageDeletionTaskProcessor processor;
+    private final Duration claimTimeout;
+    private final int batchSize;
+    private final String workerId = UUID.randomUUID().toString();
 
     public StorageDeletionWorker(
-            StorageDeletionTaskRepository repository,
-            ObjectStorage objectStorage,
-            @Value("${app.storage.cleanup.retry-delay}") Duration retryDelay
+            StorageDeletionTaskClaimer claimer,
+            StorageDeletionTaskProcessor processor,
+            @Value("${app.storage.cleanup.claim-timeout:10m}") Duration claimTimeout,
+            @Value("${app.storage.cleanup.batch-size:100}") int batchSize
     ) {
-        this.repository = repository;
-        this.objectStorage = objectStorage;
-        this.retryDelay = retryDelay;
+        this.claimer = claimer;
+        this.processor = processor;
+        this.claimTimeout = claimTimeout;
+        this.batchSize = batchSize;
     }
 
     @Scheduled(fixedDelayString = "${STORAGE_CLEANUP_POLL_INTERVAL:60000}")
-    @Transactional
     public void processPending() {
-        repository.findTop100ByCompletedAtIsNullAndNextAttemptAtBeforeOrderByCreatedAtAsc(Instant.now())
-                .forEach(task -> process(task.getId()));
+        Instant now = Instant.now();
+        List<UUID> taskIds = claimer.claimBatch(workerId, now, now.minus(claimTimeout), batchSize);
+        taskIds.forEach(this::processClaimed);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void process(UUID taskId) {
-        StorageDeletionTask task = repository.findById(taskId).orElse(null);
-        if (task == null || task.getCompletedAt() != null || task.getNextAttemptAt().isAfter(Instant.now())) {
-            return;
+        Instant now = Instant.now();
+        if (claimer.claim(taskId, workerId, now, now.minus(claimTimeout))) {
+            processClaimed(taskId);
         }
-        try {
-            objectStorage.delete(task.getStorageKey());
-            task.setCompletedAt(Instant.now());
-            task.setLastError(null);
-        } catch (RuntimeException ex) {
-            task.setAttempts(task.getAttempts() + 1);
-            task.setNextAttemptAt(Instant.now().plus(retryDelay.multipliedBy(Math.min(task.getAttempts(), 12))));
-            task.setLastError(truncate(ex.getMessage()));
-        }
-        repository.save(task);
     }
 
-    private String truncate(String message) {
-        if (message == null) {
-            return "Unknown storage deletion error.";
+    private void processClaimed(UUID taskId) {
+        try {
+            processor.process(taskId, workerId);
+        } catch (RuntimeException ex) {
+            log.error("Storage deletion task processing failed taskId={} workerId={}", taskId, workerId, ex);
         }
-        return message.length() <= 1000 ? message : message.substring(0, 1000);
     }
 }

@@ -17,7 +17,13 @@ class ProductionConfigurationValidatorTest {
                 "https://app.example.com",
                 "s3",
                 "smtp",
-                true
+                true,
+                true,
+                90,
+                365,
+                "ksef_app",
+                "ksef_migrator",
+                "ksef_audit_maintainer"
         );
 
         assertThatCode(() -> validator.run(new DefaultApplicationArguments()))
@@ -31,7 +37,13 @@ class ProductionConfigurationValidatorTest {
                 "http://localhost:5173",
                 "local",
                 "log",
-                false
+                false,
+                false,
+                0,
+                0,
+                "ksef",
+                "ksef",
+                "ksef"
         );
 
         assertThatThrownBy(() -> validator.run(new DefaultApplicationArguments()))

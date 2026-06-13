@@ -24,7 +24,11 @@ class PythonFa3ValidationRunnerTest {
                 new FileSystemResource(Path.of("src/main/resources/xsd/schemat_fa_vat-3-_v1-0.xsd")),
                 new FileSystemResource(Path.of("src/main/resources/xml-validator/validate_fa3.py")),
                 PythonTestSupport.command(),
-                Duration.ofSeconds(10)
+                Duration.ofSeconds(10),
+                new ValidatorCapacityLimiter(2, Duration.ofSeconds(1)),
+                256,
+                10,
+                16_384
         );
     }
 

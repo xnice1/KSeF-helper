@@ -16,6 +16,7 @@ public record AuditEventResponse(
         String targetId,
         String ipAddress,
         String userAgent,
-        String metadata
+        String metadata,
+        Instant redactedAt
 ) {
 }

@@ -2,8 +2,10 @@ package com.ksefhelper.organizations;
 
 import com.ksefhelper.audit.AuditEventService;
 import com.ksefhelper.audit.AuditEventType;
+import com.ksefhelper.auth.RefreshSessionService;
 import com.ksefhelper.common.exception.BadRequestException;
 import com.ksefhelper.common.exception.ForbiddenException;
+import com.ksefhelper.common.exception.NotFoundException;
 import com.ksefhelper.organizations.dto.InviteMemberRequest;
 import com.ksefhelper.organizations.dto.MembershipResponse;
 import com.ksefhelper.organizations.dto.OrganizationRequest;
@@ -31,6 +33,7 @@ public class OrganizationService {
     private final UserRepository userRepository;
     private final OrganizationAuthorizationService authorizationService;
     private final AuditEventService auditEventService;
+    private final RefreshSessionService refreshSessionService;
 
     public OrganizationService(
             CurrentUserService currentUserService,
@@ -38,7 +41,8 @@ public class OrganizationService {
             OrganizationRepository organizationRepository,
             UserRepository userRepository,
             OrganizationAuthorizationService authorizationService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            RefreshSessionService refreshSessionService
     ) {
         this.currentUserService = currentUserService;
         this.membershipRepository = membershipRepository;
@@ -46,6 +50,7 @@ public class OrganizationService {
         this.userRepository = userRepository;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
+        this.refreshSessionService = refreshSessionService;
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +105,7 @@ public class OrganizationService {
 
     @Transactional
     public MembershipResponse invite(UUID organizationId, InviteMemberRequest request) {
+        lockOrganization(organizationId);
         Membership currentMembership = ensureActiveOrganization(organizationId);
         authorizationService.require(OrganizationPermission.INVITE_MEMBERS);
         if (currentMembership.getRole() == MembershipRole.ACCOUNTANT
@@ -133,12 +139,147 @@ public class OrganizationService {
         return toResponse(saved);
     }
 
+    @Transactional
+    public MembershipResponse changeRole(UUID organizationId, UUID membershipId, MembershipRole role) {
+        lockOrganization(organizationId);
+        Membership actorMembership = ensureActiveOrganization(organizationId);
+        authorizationService.require(OrganizationPermission.MANAGE_MEMBERS);
+        Membership target = membership(organizationId, membershipId);
+        MembershipRole previousRole = target.getRole();
+        if (previousRole == role) {
+            return toResponse(target);
+        }
+        if (previousRole == MembershipRole.OWNER
+                && role != MembershipRole.OWNER
+                && ownerCount(organizationId) == 1) {
+            throw new BadRequestException("Promote another owner before changing the last owner's role.");
+        }
+
+        target.setRole(role);
+        Membership saved = membershipRepository.save(target);
+        auditEventService.record(
+                AuditEventType.ORGANIZATION_MEMBER_ROLE_CHANGED,
+                organizationId,
+                "membership",
+                saved.getId(),
+                Map.of(
+                        "userId", saved.getUser().getId(),
+                        "email", saved.getUser().getEmail(),
+                        "previousRole", previousRole,
+                        "newRole", role,
+                        "changedByMembershipId", actorMembership.getId()
+                )
+        );
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public void removeMember(UUID organizationId, UUID membershipId) {
+        lockOrganization(organizationId);
+        Membership actorMembership = ensureActiveOrganization(organizationId);
+        authorizationService.require(OrganizationPermission.MANAGE_MEMBERS);
+        Membership target = membership(organizationId, membershipId);
+        if (target.getId().equals(actorMembership.getId())) {
+            throw new BadRequestException("Use the leave organization action to remove your own membership.");
+        }
+        ensureOwnerCanBeRemoved(target);
+
+        auditEventService.record(
+                AuditEventType.ORGANIZATION_MEMBER_REMOVED,
+                organizationId,
+                "membership",
+                target.getId(),
+                Map.of(
+                        "userId", target.getUser().getId(),
+                        "email", target.getUser().getEmail(),
+                        "role", target.getRole()
+                )
+        );
+        refreshSessionService.clearActiveOrganization(target.getUser(), target.getOrganization());
+        membershipRepository.delete(target);
+    }
+
+    @Transactional
+    public void leave(UUID organizationId) {
+        lockOrganization(organizationId);
+        Membership membership = ensureActiveOrganization(organizationId);
+        ensureOwnerCanBeRemoved(membership);
+
+        auditEventService.recordForUser(
+                AuditEventType.ORGANIZATION_MEMBER_LEFT,
+                membership.getUser(),
+                organizationId,
+                "membership",
+                membership.getId(),
+                Map.of("role", membership.getRole())
+        );
+        refreshSessionService.clearActiveOrganization(membership.getUser(), membership.getOrganization());
+        membershipRepository.delete(membership);
+    }
+
+    @Transactional
+    public MembershipResponse transferOwnership(UUID organizationId, UUID membershipId) {
+        lockOrganization(organizationId);
+        Membership currentOwner = ensureActiveOrganization(organizationId);
+        authorizationService.require(OrganizationPermission.MANAGE_MEMBERS);
+        if (currentOwner.getRole() != MembershipRole.OWNER) {
+            throw new ForbiddenException("Only an owner can transfer ownership.");
+        }
+
+        Membership nextOwner = membership(organizationId, membershipId);
+        if (nextOwner.getId().equals(currentOwner.getId())) {
+            throw new BadRequestException("Choose another member to receive ownership.");
+        }
+
+        MembershipRole previousTargetRole = nextOwner.getRole();
+        nextOwner.setRole(MembershipRole.OWNER);
+        currentOwner.setRole(MembershipRole.ACCOUNTANT);
+        membershipRepository.save(nextOwner);
+        membershipRepository.save(currentOwner);
+        auditEventService.record(
+                AuditEventType.ORGANIZATION_OWNERSHIP_TRANSFERRED,
+                organizationId,
+                "membership",
+                nextOwner.getId(),
+                Map.of(
+                        "fromUserId", currentOwner.getUser().getId(),
+                        "fromEmail", currentOwner.getUser().getEmail(),
+                        "toUserId", nextOwner.getUser().getId(),
+                        "toEmail", nextOwner.getUser().getEmail(),
+                        "previousTargetRole", previousTargetRole
+                )
+        );
+        return toResponse(nextOwner);
+    }
+
     private Membership ensureActiveOrganization(UUID organizationId) {
         Membership membership = currentUserService.currentMembership();
         if (!membership.getOrganization().getId().equals(organizationId)) {
             throw new ForbiddenException("Switch to this organization before accessing it.");
         }
         return membership;
+    }
+
+    private Membership membership(UUID organizationId, UUID membershipId) {
+        return membershipRepository.findById(membershipId)
+                .filter(value -> value.getOrganization().getId().equals(organizationId))
+                .orElseThrow(() -> new NotFoundException("Organization member was not found."));
+    }
+
+    private void ensureOwnerCanBeRemoved(Membership membership) {
+        if (membership.getRole() == MembershipRole.OWNER
+                && ownerCount(membership.getOrganization().getId()) == 1) {
+            throw new BadRequestException("Transfer ownership before removing the last owner.");
+        }
+    }
+
+    private long ownerCount(UUID organizationId) {
+        return membershipRepository.countByOrganizationIdAndRole(organizationId, MembershipRole.OWNER);
+    }
+
+    private void lockOrganization(UUID organizationId) {
+        organizationRepository.findByIdForUpdate(organizationId)
+                .orElseThrow(() -> new NotFoundException("Organization was not found."));
     }
 
     private OrganizationResponse toResponse(Organization organization) {

@@ -9,6 +9,7 @@ type AuthContextValue = {
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<AuthResponse>;
   switchOrganization: (organizationId: string) => Promise<void>;
+  refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
   clearSession: () => void;
 };
@@ -66,6 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         tokenStore.set(response.token);
         queryClient.clear();
         setAuth(response);
+      },
+      refreshSession: async () => {
+        const response = await api.refresh();
+        tokenStore.set(response.token);
+        queryClient.clear();
+        setAuth(response.token ? response : null);
       },
       logout: async () => {
         await api.logout().catch(() => undefined);

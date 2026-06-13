@@ -7,6 +7,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 
 @RestController
@@ -31,10 +33,18 @@ public class OrganizationDataController {
     }
 
     @GetMapping("/export")
-    public ResponseEntity<byte[]> export() {
+    public ResponseEntity<StreamingResponseBody> export() throws java.io.IOException {
         OrganizationDataService.ExportedOrganizationData export = organizationDataService.export();
+        StreamingResponseBody body = output -> {
+            try {
+                Files.copy(export.path(), output);
+            } finally {
+                Files.deleteIfExists(export.path());
+            }
+        };
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))
+                .contentLength(Files.size(export.path()))
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment()
@@ -42,7 +52,7 @@ public class OrganizationDataController {
                                 .build()
                                 .toString()
                 )
-                .body(export.bytes());
+                .body(body);
     }
 
     @DeleteMapping

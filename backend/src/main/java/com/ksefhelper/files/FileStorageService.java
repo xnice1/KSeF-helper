@@ -19,9 +19,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.security.DigestOutputStream;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -125,6 +127,15 @@ public class FileStorageService {
         return verifiedBytes(storedFile);
     }
 
+    public void writeForBackup(StoredFile storedFile, OutputStream output) throws IOException {
+        MessageDigest digest = sha256Digest();
+        objectStorage.writeTo(storedFile.getStoragePath(), new DigestOutputStream(output, digest));
+        String actualChecksum = HexFormat.of().formatHex(digest.digest());
+        if (!actualChecksum.equals(storedFile.getChecksum())) {
+            throw new IllegalStateException("Stored XML checksum verification failed.");
+        }
+    }
+
     public void restoreFromBackup(StoredFile storedFile, byte[] bytes) {
         if (!sha256(bytes).equals(storedFile.getChecksum())) {
             throw new BadRequestException("Backup checksum does not match the stored file record.");
@@ -190,9 +201,12 @@ public class FileStorageService {
     }
 
     private String sha256(byte[] bytes) {
+        return HexFormat.of().formatHex(sha256Digest().digest(bytes));
+    }
+
+    private MessageDigest sha256Digest() {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(bytes));
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is not available.", ex);
         }

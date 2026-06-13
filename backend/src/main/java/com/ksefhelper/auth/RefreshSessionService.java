@@ -1,5 +1,7 @@
 package com.ksefhelper.auth;
 
+import com.ksefhelper.audit.AuditEventService;
+import com.ksefhelper.audit.AuditEventType;
 import com.ksefhelper.auth.entity.AuthSession;
 import com.ksefhelper.auth.repository.AuthSessionRepository;
 import com.ksefhelper.common.exception.BadRequestException;
@@ -12,20 +14,24 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Map;
 
 @Service
 public class RefreshSessionService {
     private final AuthSessionRepository repository;
     private final SecureTokenService secureTokenService;
+    private final AuditEventService auditEventService;
     private final Duration refreshExpiration;
 
     public RefreshSessionService(
             AuthSessionRepository repository,
             SecureTokenService secureTokenService,
+            AuditEventService auditEventService,
             @Value("${app.auth.refresh-expiration}") Duration refreshExpiration
     ) {
         this.repository = repository;
         this.secureTokenService = secureTokenService;
+        this.auditEventService = auditEventService;
         this.refreshExpiration = refreshExpiration;
     }
 
@@ -42,6 +48,14 @@ public class RefreshSessionService {
 
         if (current.getRevokedAt() != null) {
             repository.revokeFamily(current.getFamilyId(), now);
+            auditEventService.recordForUser(
+                    AuditEventType.REFRESH_TOKEN_REUSE_DETECTED,
+                    current.getUser(),
+                    current.getActiveOrganization() == null ? null : current.getActiveOrganization().getId(),
+                    "session_family",
+                    current.getFamilyId(),
+                    Map.of()
+            );
             throw new BadRequestException("Refresh session reuse was detected. Sign in again.");
         }
         if (!current.getExpiresAt().isAfter(now) || !current.getUser().isEnabled()) {
@@ -88,6 +102,11 @@ public class RefreshSessionService {
     @Transactional
     public void revokeAll(User user) {
         repository.revokeAllForUser(user.getId(), Instant.now());
+    }
+
+    @Transactional
+    public void clearActiveOrganization(User user, Organization organization) {
+        repository.clearActiveOrganization(user.getId(), organization.getId());
     }
 
     private IssuedRefreshToken create(User user, Organization activeOrganization, UUID familyId) {
