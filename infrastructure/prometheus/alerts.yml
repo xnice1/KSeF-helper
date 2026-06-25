@@ -1,0 +1,42 @@
+groups:
+  - name: ksef-helper
+    rules:
+      - alert: KsefHelperBackendDown
+        expr: up{job="ksef-helper"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: KSeF Helper backend is unavailable
+
+      - alert: KsefHelperHighServerErrorRate
+        expr: sum(rate(http_server_requests_seconds_count{job="ksef-helper",status=~"5.."}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: KSeF Helper is returning elevated HTTP 5xx errors
+
+      - alert: KsefHelperStorageDeletionDeadLetters
+        expr: ksef_storage_deletion_failed > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Stored objects require manual deletion recovery
+
+      - alert: KsefHelperValidatorSaturated
+        expr: ksef_validator_active >= ksef_validator_capacity
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: All FA(3) validator capacity is in use
+
+      - alert: KsefHelperJvmMemoryPressure
+        expr: sum(jvm_memory_used_bytes{area="heap"}) / sum(jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: KSeF Helper JVM heap usage is above 90 percent

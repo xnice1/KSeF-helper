@@ -9,6 +9,16 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:55432/ksef_helper}
     username: ${SPRING_DATASOURCE_USERNAME:ksef}
     password: ${SPRING_DATASOURCE_PASSWORD:ksef}
+  data:
+    redis:
+      repositories:
+        enabled: false
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      timeout: ${REDIS_TIMEOUT:2s}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -93,6 +103,8 @@ app:
     max-output-bytes: ${XML_MAX_OUTPUT_BYTES:16384}
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
+    store: ${RATE_LIMIT_STORE:memory}
+    redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:ksef-helper:rate-limit:}
     login:
       max-attempts: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:5}
       max-attempts-per-ip: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP:30}
@@ -105,7 +117,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       probes:
@@ -115,3 +127,14 @@ management:
         order: down,out-of-service,degraded,unknown,up
         http-mapping:
           degraded: 200
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${APP_ENVIRONMENT:development}
+
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${APP_ENVIRONMENT:development}
+  release: ${APP_RELEASE:development}
+  send-default-pii: false
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.0}

@@ -25,6 +25,8 @@ public class ProductionConfigurationValidator implements ApplicationRunner {
     private final String runtimeDatabaseRole;
     private final String migrationDatabaseRole;
     private final String auditMaintenanceDatabaseRole;
+    private final String rateLimitStore;
+    private final String sentryDsn;
 
     public ProductionConfigurationValidator(
             @Value("${app.jwt.secret}") String jwtSecret,
@@ -37,7 +39,9 @@ public class ProductionConfigurationValidator implements ApplicationRunner {
             @Value("${app.audit.retention-days}") int auditRetentionDays,
             @Value("${spring.datasource.username}") String runtimeDatabaseRole,
             @Value("${spring.flyway.user:}") String migrationDatabaseRole,
-            @Value("${app.audit.maintenance.username}") String auditMaintenanceDatabaseRole
+            @Value("${app.audit.maintenance.username}") String auditMaintenanceDatabaseRole,
+            @Value("${app.rate-limit.store}") String rateLimitStore,
+            @Value("${sentry.dsn:}") String sentryDsn
     ) {
         this.jwtSecret = jwtSecret;
         this.allowedOrigins = allowedOrigins;
@@ -50,6 +54,8 @@ public class ProductionConfigurationValidator implements ApplicationRunner {
         this.runtimeDatabaseRole = runtimeDatabaseRole;
         this.migrationDatabaseRole = migrationDatabaseRole;
         this.auditMaintenanceDatabaseRole = auditMaintenanceDatabaseRole;
+        this.rateLimitStore = rateLimitStore;
+        this.sentryDsn = sentryDsn;
     }
 
     @Override
@@ -86,6 +92,12 @@ public class ProductionConfigurationValidator implements ApplicationRunner {
             throw new IllegalStateException(
                     "Production must use distinct runtime, migration, and audit-maintenance database roles."
             );
+        }
+        if (!"redis".equalsIgnoreCase(rateLimitStore)) {
+            throw new IllegalStateException("Production RATE_LIMIT_STORE must be redis.");
+        }
+        if (sentryDsn.isBlank()) {
+            throw new IllegalStateException("Production SENTRY_DSN must be configured.");
         }
     }
 

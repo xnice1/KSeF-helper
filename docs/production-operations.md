@@ -13,6 +13,8 @@ Run the backend with `SPRING_PROFILES_ACTIVE=prod`. The application refuses prod
 
 Use a secrets manager supplied by the hosting platform. Do not commit production values.
 
+The deployable staging reference is documented in [`staging-deployment.md`](staging-deployment.md).
+
 ## Database Roles
 
 Provision three login roles with separate credentials:
@@ -160,6 +162,10 @@ The public liveness and readiness endpoints are:
 - `GET /actuator/health/readiness`
 
 The `dataLifecycle` health component reports pending and failed storage deletions and, after the first run, the most recent successful audit-retention run. It becomes `DEGRADED` when a dead-letter task exists or the pending queue exceeds `STORAGE_CLEANUP_PENDING_WARNING_THRESHOLD`. Configure monitoring to alert on this component even though degraded health remains HTTP 200.
+
+Production readiness additionally checks PostgreSQL, Redis, S3 bucket access, and the Python/lxml/FA(3) validator runtime. Prometheus metrics are exposed internally at `/actuator/prometheus`. Do not route that endpoint through the public edge proxy.
+
+Backend production logs use ECS JSON. Preserve `X-Request-ID` through every proxy and support channel so an API error can be matched to application logs and Sentry events.
 
 ## Platform Administrator
 

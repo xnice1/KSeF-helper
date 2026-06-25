@@ -14,6 +14,8 @@ app:
     email-verification-required: true
   mail:
     delivery: smtp
+  rate-limit:
+    store: redis
   storage:
     type: s3
     s3:
@@ -41,6 +43,37 @@ spring:
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${SMTP_AUTH:true}
           starttls:
-            enable: true
+            enable: ${SMTP_STARTTLS:true}
+            required: ${SMTP_STARTTLS_REQUIRED:true}
+
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db,redis,objectStorage,validator,dataLifecycle
+  health:
+    redis:
+      enabled: true
+
+logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: ${spring.application.name}
+        version: ${APP_RELEASE:unknown}
+        environment: ${APP_ENVIRONMENT:staging}
+    json:
+      stacktrace:
+        max-length: 8192
+        max-throwable-depth: 40
+
+sentry:
+  dsn: ${SENTRY_DSN}
+  environment: ${APP_ENVIRONMENT}
+  release: ${APP_RELEASE}
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.1}

@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [master]
+    types: [completed]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      STAGING_DIR: /opt/ksef-helper-staging
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Set image names
+        shell: bash
+        run: |
+          repository="${GITHUB_REPOSITORY,,}"
+          echo "BACKEND_IMAGE=ghcr.io/${repository}-backend" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=ghcr.io/${repository}-frontend" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${DEPLOY_SHA}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        shell: bash
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push backend
+        shell: bash
+        run: |
+          docker build --tag "${BACKEND_IMAGE}:${IMAGE_TAG}" backend
+          docker push "${BACKEND_IMAGE}:${IMAGE_TAG}"
+
+      - name: Build and push frontend
+        shell: bash
+        run: |
+          docker build --build-arg VITE_API_URL=/api --tag "${FRONTEND_IMAGE}:${IMAGE_TAG}" frontend
+          docker push "${FRONTEND_IMAGE}:${IMAGE_TAG}"
+
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.STAGING_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.STAGING_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Prepare deployment bundle
+        shell: bash
+        run: |
+          tar -czf staging-bundle.tgz compose.staging.yml infrastructure scripts/staging-smoke.sh
+          printf '%s\n' "${{ secrets.STAGING_ENV_FILE }}" > staging.env
+          {
+            echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
+            echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
+            echo "IMAGE_TAG=${IMAGE_TAG}"
+          } >> staging.env
+          printf '%s' "${{ secrets.STAGING_GHCR_TOKEN }}" > registry-token
+
+      - name: Upload deployment bundle
+        shell: bash
+        run: |
+          ssh "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_HOST }}" "mkdir -p '${STAGING_DIR}'"
+          scp staging-bundle.tgz staging.env registry-token \
+            "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_HOST }}:${STAGING_DIR}/"
+
+      - name: Deploy
+        shell: bash
+        run: |
+          ssh "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_HOST }}" \
+            "cd '${STAGING_DIR}' && \
+             tar -xzf staging-bundle.tgz && \
+             mv staging.env .env && \
+             cat registry-token | docker login ghcr.io -u '${{ secrets.STAGING_GHCR_USERNAME }}' --password-stdin && \
+             rm -f registry-token staging-bundle.tgz && \
+             docker compose --env-file .env -f compose.staging.yml pull backend frontend && \
+             docker compose --env-file .env -f compose.staging.yml build postgres caddy alertmanager && \
+             docker compose --env-file .env -f compose.staging.yml up -d --no-build --remove-orphans"
+
+      - name: Run public smoke tests
+        shell: bash
+        run: sh scripts/staging-smoke.sh "https://${{ secrets.STAGING_DOMAIN }}"

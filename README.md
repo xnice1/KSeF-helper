@@ -343,6 +343,18 @@ Production objects are stored under organization-scoped generated keys. Upload r
 
 See [`docs/production-operations.md`](docs/production-operations.md) for database-role separation, validator limits, bounded exports, backup and restore, S3 versioning, dead-letter handling, and platform-admin setup.
 
+## Staging
+
+The repository includes a production-style staging stack:
+
+```bash
+cp .env.staging.example .env.staging
+docker compose --env-file .env.staging -f compose.staging.yml up -d --build
+sh scripts/staging-smoke.sh https://staging.example.com
+```
+
+It uses Caddy HTTPS, a static Nginx frontend, three PostgreSQL roles, Redis rate limiting, versioned MinIO storage, SMTP, Sentry, Prometheus, and Alertmanager. See [`docs/staging-deployment.md`](docs/staging-deployment.md) before running it.
+
 ## Tests
 
 Backend tests require a working Python installation with `lxml`. The upload integration tests also require Docker because they start a disposable PostgreSQL container.

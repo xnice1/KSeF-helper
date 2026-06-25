@@ -7,4 +7,9 @@ uploads/
 *.log
 *.tsbuildinfo
 .env
+.env.*
+!.env.staging.example
+staging.env
+registry-token
+staging-bundle.tgz
 .DS_Store

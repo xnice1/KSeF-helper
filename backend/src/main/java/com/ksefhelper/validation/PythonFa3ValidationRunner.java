@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public class PythonFa3ValidationRunner implements Fa3ValidationRunner {
@@ -56,13 +57,17 @@ public class PythonFa3ValidationRunner implements Fa3ValidationRunner {
         Path workDirectory = Files.createTempDirectory("ksef-fa3-validator-");
         workDirectory.toFile().deleteOnExit();
         this.scriptPath = copy(validatorScript, workDirectory.resolve("validate_fa3.py"));
+        String xsdFilename = Objects.requireNonNull(
+                xsdResource.getFilename(),
+                "The configured FA(3) XSD resource must have a filename."
+        );
         for (String filename : SCHEMA_FILES) {
-            Resource resource = filename.equals(xsdResource.getFilename())
+            Resource resource = filename.equals(xsdFilename)
                     ? xsdResource
                     : xsdResource.createRelative(filename);
             copy(resource, workDirectory.resolve(filename));
         }
-        this.schemaPath = workDirectory.resolve(xsdResource.getFilename());
+        this.schemaPath = workDirectory.resolve(xsdFilename);
     }
 
     @Override
@@ -106,6 +111,32 @@ public class PythonFa3ValidationRunner implements Fa3ValidationRunner {
                 return SchemaValidationResult.invalid(line, column, message);
             }
             throw new IOException(output.isBlank() ? "FA(3) validator process failed." : output);
+        }
+    }
+
+    @Override
+    public boolean healthCheck() throws Exception {
+        try (ValidatorCapacityLimiter.Lease ignored = capacityLimiter.acquire()) {
+            Process process = new ProcessBuilder(
+                    validatorCommand,
+                    scriptPath.toString(),
+                    "--health",
+                    schemaPath.toString(),
+                    Integer.toString(memoryLimitMb),
+                    Integer.toString(cpuLimitSeconds)
+            )
+                    .redirectErrorStream(true)
+                    .start();
+            OutputCollector outputCollector = new OutputCollector(process.getInputStream(), maxOutputBytes);
+            Thread outputThread = Thread.ofVirtual().start(outputCollector);
+            boolean completed = process.waitFor(Math.min(timeout.toMillis(), 5000), TimeUnit.MILLISECONDS);
+            if (!completed) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+                return false;
+            }
+            outputThread.join(Duration.ofSeconds(2));
+            return process.exitValue() == 0 && !outputCollector.truncated();
         }
     }
 

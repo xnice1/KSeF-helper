@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install FA(3) validator
-        run: python -m pip install lxml==6.0.2
+        run: python -m pip install lxml==6.1.0
 
       - name: Test backend
         working-directory: backend
@@ -54,3 +54,36 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+  staging-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate staging compose
+        run: docker compose --env-file .env.staging.example -f compose.staging.yml config --quiet
+
+      - name: Build production containers
+        run: |
+          docker build backend
+          docker build --build-arg VITE_API_URL=/api frontend
+          docker build infrastructure/postgres
+          docker build infrastructure/caddy
+          docker build infrastructure/alertmanager
+
+      - name: Start disposable staging stack
+        run: docker compose --profile smoke --env-file infrastructure/smoke.env -f compose.staging.yml up -d --build --wait
+
+      - name: Run staging smoke tests
+        env:
+          SMOKE_RESOLVE: staging.test:80:127.0.0.1
+          SMOKE_CORS_ORIGIN: http://frontend.staging.test
+        run: sh scripts/staging-smoke.sh http://staging.test
+
+      - name: Show staging logs on failure
+        if: failure()
+        run: docker compose --profile smoke --env-file infrastructure/smoke.env -f compose.staging.yml logs
+
+      - name: Stop disposable staging stack
+        if: always()
+        run: docker compose --profile smoke --env-file infrastructure/smoke.env -f compose.staging.yml down --volumes

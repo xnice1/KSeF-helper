@@ -1,0 +1,243 @@
+name: ksef-helper-staging
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-ksef-helper-postgres}:${IMAGE_TAG:-staging}
+    build:
+      context: ./infrastructure/postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ksef_helper}
+      POSTGRES_USER: ${POSTGRES_BOOTSTRAP_USER:-ksef_bootstrap}
+      POSTGRES_PASSWORD: ${POSTGRES_BOOTSTRAP_PASSWORD:?Set POSTGRES_BOOTSTRAP_PASSWORD}
+      DB_MIGRATION_ROLE: ${DB_MIGRATION_ROLE:-ksef_migrator}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:?Set DB_MIGRATION_PASSWORD}
+      DB_RUNTIME_ROLE: ${DB_RUNTIME_ROLE:-ksef_runtime}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?Set DB_RUNTIME_PASSWORD}
+      DB_AUDIT_MAINTENANCE_ROLE: ${DB_AUDIT_MAINTENANCE_ROLE:-ksef_audit_maintainer}
+      DB_AUDIT_MAINTENANCE_PASSWORD: ${DB_AUDIT_MAINTENANCE_PASSWORD:?Set DB_AUDIT_MAINTENANCE_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    security_opt:
+      - no-new-privileges:true
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    profiles: ["smoke"]
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-smoke-only}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-smoke-only-password}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    profiles: ["smoke"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-smoke-only}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-smoke-only-password}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-ksef-helper-staging}
+    volumes:
+      - ./infrastructure/minio/init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+
+  backend:
+    image: ${BACKEND_IMAGE:-ksef-helper-backend}:${IMAGE_TAG:-staging}
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      APP_ENVIRONMENT: staging
+      APP_RELEASE: ${IMAGE_TAG:-staging}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ksef_helper}
+      DB_RUNTIME_ROLE: ${DB_RUNTIME_ROLE:-ksef_runtime}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD}
+      DB_MIGRATION_ROLE: ${DB_MIGRATION_ROLE:-ksef_migrator}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD}
+      DB_AUDIT_MAINTENANCE_ROLE: ${DB_AUDIT_MAINTENANCE_ROLE:-ksef_audit_maintainer}
+      DB_AUDIT_MAINTENANCE_PASSWORD: ${DB_AUDIT_MAINTENANCE_PASSWORD}
+      AUDIT_MAINTENANCE_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ksef_helper}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      FRONTEND_URL: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-${PUBLIC_BASE_URL}}
+      FILE_STORAGE_TYPE: s3
+      S3_BUCKET: ${S3_BUCKET:-ksef-helper-staging}
+      S3_REGION: ${S3_REGION:-eu-central-1}
+      S3_ENDPOINT: ${S3_ENDPOINT:?Set S3_ENDPOINT to the managed S3-compatible service}
+      S3_PATH_STYLE_ACCESS: ${S3_PATH_STYLE_ACCESS:-false}
+      S3_SERVER_SIDE_ENCRYPTION: ${S3_SERVER_SIDE_ENCRYPTION:-AES256}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RATE_LIMIT_STORE: redis
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED:-true}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM}
+      SENTRY_DSN: ${SENTRY_DSN:?Set SENTRY_DSN}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      AUDIT_PERSONAL_DATA_DAYS: ${AUDIT_PERSONAL_DATA_DAYS:-90}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      INVOICE_RETENTION_DAYS: ${INVOICE_RETENTION_DAYS:-0}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError}
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 15s
+      timeout: 8s
+      start_period: 60s
+      retries: 8
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ksef-helper-frontend}:${IMAGE_TAG:-staging}
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=0700,uid=100,gid=101
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: ${CADDY_IMAGE:-ksef-helper-caddy}:${IMAGE_TAG:-staging}
+    build:
+      context: ./infrastructure/caddy
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    environment:
+      STAGING_DOMAIN: ${STAGING_DOMAIN}
+      STAGING_SITE_ADDRESS: ${STAGING_SITE_ADDRESS:-${STAGING_DOMAIN}}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      alertmanager:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    security_opt:
+      - no-new-privileges:true
+
+  alertmanager:
+    build:
+      context: ./infrastructure/alertmanager
+    restart: unless-stopped
+    environment:
+      ALERT_SMTP_SMARTHOST: ${ALERT_SMTP_SMARTHOST:?Set ALERT_SMTP_SMARTHOST}
+      ALERT_SMTP_USERNAME: ${ALERT_SMTP_USERNAME:?Set ALERT_SMTP_USERNAME}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD:?Set ALERT_SMTP_PASSWORD}
+      ALERT_SMTP_REQUIRE_TLS: ${ALERT_SMTP_REQUIRE_TLS:-true}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:?Set ALERT_EMAIL_FROM}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:?Set ALERT_EMAIL_TO}
+    volumes:
+      - alertmanager-data:/alertmanager
+    security_opt:
+      - no-new-privileges:true
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: [smoke]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  caddy-data:
+  caddy-config:
+  prometheus-data:
+  alertmanager-data:

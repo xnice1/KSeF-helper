@@ -4,17 +4,11 @@ import com.ksefhelper.validation.dto.ValidationIssue;
 import com.ksefhelper.validation.entity.ValidationSeverity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
-import org.w3c.dom.Document;
 import org.xml.sax.SAXParseException;
 
 import javax.xml.parsers.DocumentBuilder;
 import java.io.File;
-import java.io.IOException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,30 +18,6 @@ public class XmlTechnicalValidationService {
 
     private final Fa3ValidationRunner validationRunner;
 
-    @Autowired
-    public XmlTechnicalValidationService(
-            @Value("${app.xml.xsd-path}") Resource xsdResource,
-            @Value("${app.xml.validator-script}") Resource validatorScript,
-            @Value("${app.xml.validator-command}") String validatorCommand,
-            @Value("${app.xml.validation-timeout}") Duration validationTimeout,
-            @Value("${app.xml.max-concurrent-validations:2}") int maximumConcurrentValidations,
-            @Value("${app.xml.capacity-acquire-timeout:2s}") Duration capacityAcquireTimeout,
-            @Value("${app.xml.memory-limit-mb:256}") int memoryLimitMb,
-            @Value("${app.xml.cpu-limit-seconds:10}") int cpuLimitSeconds,
-            @Value("${app.xml.max-output-bytes:16384}") int maxOutputBytes
-    ) throws IOException {
-        this(new PythonFa3ValidationRunner(
-                xsdResource,
-                validatorScript,
-                validatorCommand,
-                validationTimeout,
-                new ValidatorCapacityLimiter(maximumConcurrentValidations, capacityAcquireTimeout),
-                memoryLimitMb,
-                cpuLimitSeconds,
-                maxOutputBytes
-        ));
-    }
-
     public XmlTechnicalValidationService(Fa3ValidationRunner validationRunner) {
         this.validationRunner = validationRunner;
     }
@@ -55,7 +25,7 @@ public class XmlTechnicalValidationService {
     public List<ValidationIssue> validate(File xmlFile) {
         List<ValidationIssue> issues = new ArrayList<>();
         try {
-            secureDocument(xmlFile);
+            parseSecurely(xmlFile);
         } catch (SAXParseException ex) {
             issues.add(new ValidationIssue(
                     ValidationSeverity.ERROR,
@@ -100,8 +70,8 @@ public class XmlTechnicalValidationService {
         return issues;
     }
 
-    private Document secureDocument(File xmlFile) throws Exception {
+    private void parseSecurely(File xmlFile) throws Exception {
         DocumentBuilder builder = XmlSecurity.secureDocumentBuilderFactory().newDocumentBuilder();
-        return builder.parse(xmlFile);
+        builder.parse(xmlFile);
     }
 }

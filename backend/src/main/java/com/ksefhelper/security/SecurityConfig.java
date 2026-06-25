@@ -61,7 +61,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/health/liveness",
-                                "/actuator/health/readiness"
+                                "/actuator/health/readiness",
+                                "/actuator/prometheus"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                         .anyRequest().authenticated()
@@ -97,7 +98,8 @@ public class SecurityConfig {
                 .filter(origin -> !origin.isEmpty())
                 .toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-ID"));
+        configuration.setExposedHeaders(List.of("X-Request-ID", "Content-Disposition"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -29,9 +29,11 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private final AuditEventService auditEventService;
+    private final ErrorTracker errorTracker;
 
-    public GlobalExceptionHandler(AuditEventService auditEventService) {
+    public GlobalExceptionHandler(AuditEventService auditEventService, ErrorTracker errorTracker) {
         this.auditEventService = auditEventService;
+        this.errorTracker = errorTracker;
     }
 
     @ExceptionHandler(BadRequestException.class)
@@ -89,6 +91,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
         LOGGER.error("Unexpected request failure method={} path={}", request.getMethod(), request.getRequestURI(), ex);
+        errorTracker.capture(ex, request);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.", request);
     }
 
@@ -106,7 +109,8 @@ public class GlobalExceptionHandler {
                 status.value(),
                 status.getReasonPhrase(),
                 message,
-                request.getRequestURI()
+                request.getRequestURI(),
+                RequestIdFilter.requestId(request)
         );
     }
 

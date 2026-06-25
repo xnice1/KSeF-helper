@@ -32,6 +32,11 @@ class PythonFa3ValidationRunnerTest {
         );
     }
 
+    @Test
+    void reportsAHealthyValidatorRuntime() throws Exception {
+        assertThat(runner.healthCheck()).isTrue();
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("officialSamples")
     void validatesEveryOfficialFa3Sample(Path sample) throws Exception {

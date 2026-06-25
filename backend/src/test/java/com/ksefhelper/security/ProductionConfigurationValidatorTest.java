@@ -23,7 +23,9 @@ class ProductionConfigurationValidatorTest {
                 365,
                 "ksef_app",
                 "ksef_migrator",
-                "ksef_audit_maintainer"
+                "ksef_audit_maintainer",
+                "redis",
+                "https://public@example.ingest.sentry.io/1"
         );
 
         assertThatCode(() -> validator.run(new DefaultApplicationArguments()))
@@ -43,7 +45,9 @@ class ProductionConfigurationValidatorTest {
                 0,
                 "ksef",
                 "ksef",
-                "ksef"
+                "ksef",
+                "memory",
+                ""
         );
 
         assertThatThrownBy(() -> validator.run(new DefaultApplicationArguments()))

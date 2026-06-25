@@ -20,6 +20,22 @@ def clean(message: str) -> str:
 
 
 def main() -> int:
+    if len(sys.argv) == 5 and sys.argv[1] == "--health":
+        apply_resource_limits(int(sys.argv[3]), int(sys.argv[4]))
+        parser = etree.XMLParser(
+            resolve_entities=False,
+            load_dtd=False,
+            no_network=True,
+            huge_tree=False,
+        )
+        try:
+            etree.XMLSchema(etree.parse(sys.argv[2], parser))
+        except (OSError, etree.XMLSyntaxError, etree.XMLSchemaParseError) as error:
+            print(clean(str(error)))
+            return 3
+        print("ok")
+        return 0
+
     if len(sys.argv) != 5:
         print("validator requires schema, XML, memory-limit, and CPU-limit arguments")
         return 3

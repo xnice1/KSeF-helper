@@ -1,0 +1,39 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$STAGING_SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	handle /health/live {
+		rewrite * /actuator/health/liveness
+		reverse_proxy backend:8080
+	}
+
+	handle /health/ready {
+		rewrite * /actuator/health/readiness
+		reverse_proxy backend:8080
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		reverse_proxy frontend:8080
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
