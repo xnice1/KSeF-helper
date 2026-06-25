@@ -355,6 +355,12 @@ sh scripts/staging-smoke.sh https://staging.example.com
 
 It uses Caddy HTTPS, a static Nginx frontend, three PostgreSQL roles, Redis rate limiting, versioned MinIO storage, SMTP, Sentry, Prometheus, and Alertmanager. See [`docs/staging-deployment.md`](docs/staging-deployment.md) before running it.
 
+## Legal
+
+The public app exposes draft legal pages at `/legal/terms`, `/legal/privacy`, `/legal/dpa`, `/legal/retention`, and `/legal/support`.
+
+Source drafts live under [`docs/legal/`](docs/legal/). They are templates only. Fill the operator details, contact emails, subprocessors, hosting regions, billing terms, retention values, governing law, and support commitments, then get legal review before taking public payments.
+
 ## Tests
 
 Backend tests require a working Python installation with `lxml`. The upload integration tests also require Docker because they start a disposable PostgreSQL container.

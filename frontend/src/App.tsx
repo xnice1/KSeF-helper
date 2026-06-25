@@ -16,6 +16,7 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { RequestVerificationPage } from "./pages/RequestVerificationPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { LegalPage } from "./pages/LegalPage";
 
 function Protected() {
   const { auth, loading } = useAuth();
@@ -46,6 +47,12 @@ export function App() {
       <Route path="/request-verification" element={<Public><RequestVerificationPage /></Public>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/legal/:slug" element={<LegalPage />} />
+      <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
+      <Route path="/privacy" element={<Navigate to="/legal/privacy" replace />} />
+      <Route path="/dpa" element={<Navigate to="/legal/dpa" replace />} />
+      <Route path="/retention" element={<Navigate to="/legal/retention" replace />} />
+      <Route path="/support" element={<Navigate to="/legal/support" replace />} />
       <Route path="/app" element={<Protected />}>
         <Route index element={<DashboardPage />} />
         <Route path="companies" element={<CompaniesPage />} />

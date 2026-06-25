@@ -1,5 +1,5 @@
 import { Building2, FileCheck2, FileText, LayoutDashboard, LogOut, Settings, Upload } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { hasPermission } from "../auth/permissions";
 
@@ -74,6 +74,16 @@ export function AppLayout() {
         </nav>
         <main>
           <Outlet />
+          <footer className="mt-10 border-t border-line pt-5 text-sm text-neutral-600">
+            <div className="flex flex-wrap gap-3">
+              <Link className="focus-ring rounded-md px-1 font-semibold hover:text-emerald-800" to="/legal/terms">Terms</Link>
+              <Link className="focus-ring rounded-md px-1 font-semibold hover:text-emerald-800" to="/legal/privacy">Privacy</Link>
+              <Link className="focus-ring rounded-md px-1 font-semibold hover:text-emerald-800" to="/legal/dpa">DPA</Link>
+              <Link className="focus-ring rounded-md px-1 font-semibold hover:text-emerald-800" to="/legal/retention">Retention</Link>
+              <Link className="focus-ring rounded-md px-1 font-semibold hover:text-emerald-800" to="/legal/support">Support</Link>
+            </div>
+            <p className="mt-2">Not an official government, KSeF, tax, legal, accounting, or certification service.</p>
+          </footer>
         </main>
       </div>
     </div>

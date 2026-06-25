@@ -73,6 +73,18 @@ export function LandingPage() {
           </div>
         </section>
       </main>
+      <footer className="border-t border-line bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-5 text-sm text-neutral-600 sm:px-6">
+          <p>KSeF Helper is not an official government or KSeF certification service.</p>
+          <nav className="flex flex-wrap gap-3 font-semibold">
+            <Link className="focus-ring rounded-md px-1 hover:text-emerald-800" to="/legal/terms">Terms</Link>
+            <Link className="focus-ring rounded-md px-1 hover:text-emerald-800" to="/legal/privacy">Privacy</Link>
+            <Link className="focus-ring rounded-md px-1 hover:text-emerald-800" to="/legal/dpa">DPA</Link>
+            <Link className="focus-ring rounded-md px-1 hover:text-emerald-800" to="/legal/retention">Retention</Link>
+            <Link className="focus-ring rounded-md px-1 hover:text-emerald-800" to="/legal/support">Support</Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }
