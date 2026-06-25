@@ -29,6 +29,28 @@ wait_for() {
   return 1
 }
 
+has_header() {
+  header_name="$1"
+  header_value="$2"
+  header_file="$3"
+  awk -v name="$header_name" -v value="$header_value" '
+    BEGIN { name = tolower(name) }
+    {
+      colon = index($0, ":")
+      if (colon == 0) {
+        next
+      }
+      field = tolower(substr($0, 1, colon - 1))
+      actual = substr($0, colon + 1)
+      sub(/^[ \t]+/, "", actual)
+      if (field == name && actual == value) {
+        found = 1
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$header_file"
+}
+
 wait_for "frontend" "$base_url/healthz"
 wait_for "liveness" "$base_url/health/live"
 wait_for "readiness" "$base_url/health/ready"
@@ -36,7 +58,9 @@ wait_for "readiness" "$base_url/health/ready"
 headers="$(mktemp)"
 body="$(mktemp)"
 cors_headers="$(mktemp)"
-trap 'rm -f "$headers" "$body" "$cors_headers"' EXIT
+normalized_headers="$(mktemp)"
+normalized_cors_headers="$(mktemp)"
+trap 'rm -f "$headers" "$body" "$cors_headers" "$normalized_headers" "$normalized_cors_headers"' EXIT
 
 status="$(
   curl $curl_extra --silent --show-error \
@@ -52,8 +76,10 @@ if [ "$status" != "401" ]; then
   exit 1
 fi
 
-if ! grep -Eiq '^X-Request-ID: staging-smoke-test\r?$' "$headers"; then
+tr -d '\r' < "$headers" > "$normalized_headers"
+if ! has_header 'X-Request-ID' 'staging-smoke-test' "$normalized_headers"; then
   printf 'API response did not preserve the supplied X-Request-ID\n' >&2
+  sed -n '1,40p' "$normalized_headers" >&2
   exit 1
 fi
 
@@ -68,8 +94,10 @@ curl $curl_extra --silent --show-error --output /dev/null --dump-header "$cors_h
   -H 'Access-Control-Request-Method: POST' \
   "$base_url/api/auth/login"
 
-if ! grep -Eiq "^Access-Control-Allow-Origin: ${cors_origin}\r?$" "$cors_headers"; then
+tr -d '\r' < "$cors_headers" > "$normalized_cors_headers"
+if ! has_header 'Access-Control-Allow-Origin' "$cors_origin" "$normalized_cors_headers"; then
   printf 'Expected CORS origin was not returned\n' >&2
+  sed -n '1,40p' "$normalized_cors_headers" >&2
   exit 1
 fi
 
