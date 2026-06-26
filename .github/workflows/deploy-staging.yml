@@ -3,10 +3,11 @@ name: Deploy staging
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["CI"]
-    branches: [master]
-    types: [completed]
+    inputs:
+      ref:
+        description: "Git ref or commit SHA to deploy"
+        required: false
+        default: "master"
 
 permissions:
   contents: read
@@ -14,15 +15,14 @@ permissions:
 
 concurrency:
   group: staging
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: staging
     env:
-      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      DEPLOY_SHA: ${{ inputs.ref }}
       STAGING_DIR: /opt/ksef-helper-staging
     steps:
       - uses: actions/checkout@v6
